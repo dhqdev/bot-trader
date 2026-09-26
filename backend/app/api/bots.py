@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.core.engine import BotService, add_event, binance_credential, bot_market, make_live_trader, manager
+from app.core.engine import BotService, add_event, binance_credential, make_live_trader, manager
 from app.core.exchange import PaperTrader, get_market, interval_ms, now_ms
 from app.core.risk import RiskConfig
 from app.core.strategies import get_strategy
@@ -128,7 +128,7 @@ def close_position(bot: Bot = Depends(get_user_bot), db: Session = Depends(get_d
         pos = db.scalar(select(Position).where(Position.bot_id == bot.id, Position.status == "open"))
         if pos is None:
             raise HTTPException(400, "Não há posição aberta.")
-        market = bot_market(db, bot)
+        market = manager.market_for(db, bot)
         risk = RiskConfig(**(bot.risk or {}))
         trader = PaperTrader(market, risk.fee_pct) if bot.mode == "paper" else make_live_trader(db, bot)
         service = BotService(db, bot, market, trader)
@@ -217,7 +217,7 @@ def events(
 def chart(limit: int = Query(300, ge=50, le=1000), bot: Bot = Depends(get_user_bot), db: Session = Depends(get_db)):
     strategy = get_strategy(bot.strategy)
     params = strategy.resolve_params(bot.strategy_params)
-    market = bot_market(db, bot)
+    market = manager.market_for(db, bot)
     try:
         df = market.klines(bot.symbol, bot.interval, limit=limit + strategy.warmup(params), closed_only=False)
     except Exception as exc:
