@@ -22,6 +22,7 @@ export interface Param {
   max: number | null;
   step: number | null;
   options: string[] | null;
+  labels?: string[] | null;
   help: string;
 }
 
@@ -61,6 +62,7 @@ export interface RiskConfig {
 
 export interface StrategiesResponse {
   default: string;
+  default_interval: string;
   strategies: StrategyInfo[];
   default_risk: RiskConfig;
 }

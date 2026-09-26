@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import { Plus, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { api } from "../lib/api";
+import { num } from "../lib/format";
 import type { Param, RiskConfig, StrategiesResponse, StrategyInfo } from "../lib/types";
 import { Button, Field, Input, Select, Switch } from "./ui";
 
@@ -17,13 +19,20 @@ export function useSymbols() {
   });
 }
 
-export const INTERVALS = ["5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"];
+export const INTERVALS = ["15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"];
 
 export type Params = Record<string, number | boolean | string>;
 
 export function defaultParams(s: StrategyInfo | undefined): Params {
   return Object.fromEntries((s?.params ?? []).map((p) => [p.name, p.default]));
 }
+
+// textos de ajuda compartilhados entre o laboratório e o formulário do bot
+export const HELP = {
+  symbol: "Moeda que será comprada e vendida, cotada em dólar (USDT). Ex.: BTCUSDT = Bitcoin, SOLUSDT = Solana.",
+  interval:
+    "Cada candle resume o preço nesse intervalo, e a estratégia decide a cada candle fechado. Recomendado: 4 horas. Nos testes, 1 hora ou menos perdeu para o ruído e as taxas em quase todas as estratégias.",
+};
 
 export function StrategyPicker({ strategies, value, onChange }: { strategies: StrategyInfo[]; value: string; onChange: (key: string) => void }) {
   return (
@@ -40,7 +49,7 @@ export function StrategyPicker({ strategies, value, onChange }: { strategies: St
         >
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-medium text-ink">{s.name}</span>
-            <span className="text-xs text-muted">{i === 0 ? "recomendada" : s.style}</span>
+            <span className={clsx("shrink-0 text-xs", i === 0 ? "text-accent" : "text-muted")}>{i === 0 ? "recomendada" : s.style}</span>
           </div>
           <p className="mt-1 line-clamp-3 text-xs text-ink-2">{s.description}</p>
         </button>
@@ -49,25 +58,44 @@ export function StrategyPicker({ strategies, value, onChange }: { strategies: St
   );
 }
 
+function rangeText(p: Param): string | null {
+  if (p.min == null || p.max == null) return null;
+  return `Aceita de ${num(p.min)} a ${num(p.max)}. Padrão: ${num(Number(p.default))}.`;
+}
+
 function ParamInput({ param, value, onChange }: { param: Param; value: Params[string]; onChange: (v: Params[string]) => void }) {
   if (param.type === "bool") {
-    return <Switch checked={Boolean(value)} onChange={onChange} label={param.label} />;
+    return (
+      <div>
+        <Switch checked={Boolean(value)} onChange={onChange} label={param.label} />
+        {param.help && <p className="mt-1 ml-11.5 text-xs text-muted">{param.help}</p>}
+      </div>
+    );
   }
   if (param.type === "select") {
     return (
       <Field label={param.label} help={param.help}>
         <Select value={String(value)} onChange={(e) => onChange(e.target.value)}>
-          {(param.options ?? []).map((o) => (
+          {(param.options ?? []).map((o, i) => (
             <option key={o} value={o}>
-              {o.toUpperCase()}
+              {param.labels?.[i] ?? o.toUpperCase()}
             </option>
           ))}
         </Select>
       </Field>
     );
   }
+  const range = rangeText(param);
   return (
-    <Field label={param.label} help={param.help || (param.min != null && param.max != null ? `${param.min} a ${param.max}` : undefined)}>
+    <Field
+      label={param.label}
+      help={
+        <>
+          {param.help}
+          {range && <span className="block text-muted/80">{range}</span>}
+        </>
+      }
+    >
       <Input
         type="number"
         value={value as number}
@@ -85,13 +113,16 @@ export function ParamsForm({ strategy, values, onChange }: { strategy: StrategyI
   const flags = strategy.params.filter((p) => p.type === "bool");
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-ink-2">
+        Os valores já vêm com a configuração que teve o melhor resultado nos testes. Para experimentar, mude <strong className="text-ink">um parâmetro de cada vez</strong> e compare o backtest com o anterior. Mudar vários juntos esconde o que ajudou e o que atrapalhou.
+      </p>
+      <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
         {numeric.map((p) => (
           <ParamInput key={p.name} param={p} value={values[p.name] ?? p.default} onChange={(v) => onChange({ ...values, [p.name]: v })} />
         ))}
       </div>
       {flags.length > 0 && (
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-3">
           {flags.map((p) => (
             <ParamInput key={p.name} param={p} value={values[p.name] ?? p.default} onChange={(v) => onChange({ ...values, [p.name]: v })} />
           ))}
@@ -110,7 +141,7 @@ function NumberField({ label, value, onChange, step = 0.1, min = 0, help, suffix
   onChange: (v: number) => void;
   step?: number;
   min?: number;
-  help?: string;
+  help?: ReactNode;
   suffix?: string;
 }) {
   return (
@@ -120,15 +151,42 @@ function NumberField({ label, value, onChange, step = 0.1, min = 0, help, suffix
   );
 }
 
-export function RiskForm({ risk, onChange, quote = "USDT" }: { risk: RiskConfig; onChange: (r: RiskConfig) => void; quote?: string }) {
+function Section({ title, intro, children }: { title: string; intro: ReactNode; children: ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-xs font-semibold tracking-wide text-muted uppercase">{title}</h3>
+        <p className="mt-1 text-xs text-ink-2">{intro}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function RiskForm({ risk, onChange, quote = "USDT", lab = false }: { risk: RiskConfig; onChange: (r: RiskConfig) => void; quote?: string; lab?: boolean }) {
   const set = <K extends keyof RiskConfig>(k: K, v: RiskConfig[K]) => onChange({ ...risk, [k]: v });
   const tps = risk.take_profits;
   return (
-    <div className="space-y-6">
-      <section className="space-y-3">
-        <h3 className="text-xs font-semibold tracking-wide text-muted uppercase">Tamanho da posição</h3>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Modo">
+    <div className="space-y-7">
+      <Section
+        title="Tamanho da posição"
+        intro={
+          lab
+            ? "Quanto do capital cada compra usa. No laboratório o padrão é 100% do saldo, para o retorno refletir só a estratégia."
+            : "Quanto dinheiro cada compra usa. Comece pequeno no modo real."
+        }
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field
+            label="Modo"
+            help={
+              risk.sizing_mode === "fixed_quote"
+                ? "Sempre compra o mesmo valor."
+                : risk.sizing_mode === "percent_balance"
+                  ? "Usa uma fração do saldo livre no momento da compra."
+                  : "Calcula o tamanho para que, se o stop for atingido, a perda seja no máximo X% do patrimônio."
+            }
+          >
             <Select value={risk.sizing_mode} onChange={(e) => set("sizing_mode", e.target.value as RiskConfig["sizing_mode"])}>
               <option value="fixed_quote">Valor fixo por compra</option>
               <option value="percent_balance">% do saldo disponível</option>
@@ -136,22 +194,21 @@ export function RiskForm({ risk, onChange, quote = "USDT" }: { risk: RiskConfig;
             </Select>
           </Field>
           {risk.sizing_mode === "fixed_quote" && (
-            <NumberField label="Valor por compra" suffix={quote} value={risk.order_size_quote} onChange={(v) => set("order_size_quote", v)} step={1} help="Mínimo da Binance ≈ 5 USDT" />
+            <NumberField label="Valor por compra" suffix={quote} value={risk.order_size_quote} onChange={(v) => set("order_size_quote", v)} step={1} help="Quanto cada compra gasta. A Binance recusa ordens abaixo de ~5 USDT." />
           )}
           {risk.sizing_mode === "percent_balance" && (
-            <NumberField label="% do saldo" value={risk.balance_percent} onChange={(v) => set("balance_percent", v)} step={1} />
+            <NumberField label="% do saldo" value={risk.balance_percent} onChange={(v) => set("balance_percent", v)} step={1} help="Ex.: 25 = cada compra usa um quarto do saldo livre." />
           )}
           {risk.sizing_mode === "risk_percent" && (
-            <NumberField label="Risco por operação" suffix="%" value={risk.risk_percent} onChange={(v) => set("risk_percent", v)} help="Perda máxima se o stop for atingido" />
+            <NumberField label="Risco por operação" suffix="%" value={risk.risk_percent} onChange={(v) => set("risk_percent", v)} help="1% é o limite usado por muitos traders profissionais. Exige stop loss ligado." />
           )}
-          <NumberField label="Limite por posição" suffix={quote} value={risk.max_position_quote} onChange={(v) => set("max_position_quote", v)} step={1} help="0 = sem limite" />
+          <NumberField label="Limite por posição" suffix={quote} value={risk.max_position_quote} onChange={(v) => set("max_position_quote", v)} step={1} help="Teto de segurança para uma única compra. 0 = sem limite." />
         </div>
-      </section>
+      </Section>
 
-      <section className="space-y-3">
-        <h3 className="text-xs font-semibold tracking-wide text-muted uppercase">Stop loss</h3>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Tipo">
+      <Section title="Stop loss" intro="Vende automaticamente se o preço cair até certo ponto, para limitar o prejuízo de uma operação. É conferido a cada ~15 segundos, não só no fechamento do candle.">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field label="Tipo" help="ATR é a variação média de um candle: o stop fica mais longe em moedas agitadas e mais perto nas calmas, se adaptando a cada ativo.">
             <Select value={risk.stop_loss_mode} onChange={(e) => set("stop_loss_mode", e.target.value as RiskConfig["stop_loss_mode"])}>
               <option value="atr">Pela volatilidade (ATR)</option>
               <option value="percent">Percentual fixo</option>
@@ -159,38 +216,41 @@ export function RiskForm({ risk, onChange, quote = "USDT" }: { risk: RiskConfig;
             </Select>
           </Field>
           {risk.stop_loss_mode === "atr" && (
-            <NumberField label="Distância" suffix="× ATR" value={risk.stop_loss_atr_mult} onChange={(v) => set("stop_loss_atr_mult", v)} help="3 × ATR deixa a tendência respirar" />
+            <NumberField label="Distância" suffix="× ATR" value={risk.stop_loss_atr_mult} onChange={(v) => set("stop_loss_atr_mult", v)} help="3 = três vezes a variação média de um candle abaixo da compra (mínimo 0,5%). Stops curtos demais são atingidos pelo ruído normal." />
           )}
           {risk.stop_loss_mode === "percent" && (
-            <NumberField label="Distância" suffix="%" value={risk.stop_loss_pct} onChange={(v) => set("stop_loss_pct", v)} />
+            <NumberField label="Distância" suffix="%" value={risk.stop_loss_pct} onChange={(v) => set("stop_loss_pct", v)} help="Vende se o preço cair esta % abaixo do preço de compra." />
           )}
         </div>
-      </section>
+      </Section>
 
-      <section className="space-y-3">
-        <h3 className="text-xs font-semibold tracking-wide text-muted uppercase">Proteção de lucro</h3>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <NumberField label="Break-even após" suffix="%" value={risk.breakeven_at_pct} onChange={(v) => set("breakeven_at_pct", v)} help="Move o stop para a entrada. 0 = desligado" />
+      <Section title="Proteção de lucro (opcional)" intro="Tudo desligado por padrão: nos testes, proteger o lucro cedo cortou as tendências que mais rendiam. Ligue se preferir um resultado mais estável, mesmo que menor.">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <NumberField label="Break-even após" suffix="% de lucro" value={risk.breakeven_at_pct} onChange={(v) => set("breakeven_at_pct", v)} help="Ao atingir esse lucro, o stop sobe para o preço de compra (+ taxas) e a operação não vira mais prejuízo. 0 = desligado." />
         </div>
-        <Switch checked={risk.trailing_enabled} onChange={(v) => set("trailing_enabled", v)} label="Trailing stop (stop que acompanha a alta)" />
+        <div>
+          <Switch checked={risk.trailing_enabled} onChange={(v) => set("trailing_enabled", v)} label="Trailing stop (stop que sobe junto com o preço)" />
+          <p className="mt-1 ml-11.5 text-xs text-muted">Acompanha a máxima desde a compra e vende se o preço devolver uma parte da alta.</p>
+        </div>
         {risk.trailing_enabled && (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Tipo">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="Tipo" help="Distância fixa em % ou adaptada à volatilidade (ATR).">
               <Select value={risk.trailing_mode} onChange={(e) => set("trailing_mode", e.target.value as RiskConfig["trailing_mode"])}>
                 <option value="atr">Pela volatilidade (ATR)</option>
                 <option value="percent">Percentual</option>
               </Select>
             </Field>
             {risk.trailing_mode === "atr" ? (
-              <NumberField label="Distância da máxima" suffix="× ATR" value={risk.trailing_atr_mult} onChange={(v) => set("trailing_atr_mult", v)} />
+              <NumberField label="Distância da máxima" suffix="× ATR" value={risk.trailing_atr_mult} onChange={(v) => set("trailing_atr_mult", v)} help="Quanto o preço pode recuar da máxima antes de vender." />
             ) : (
-              <NumberField label="Distância da máxima" suffix="%" value={risk.trailing_pct} onChange={(v) => set("trailing_pct", v)} />
+              <NumberField label="Distância da máxima" suffix="%" value={risk.trailing_pct} onChange={(v) => set("trailing_pct", v)} help="Ex.: 5 = vende se cair 5% a partir da máxima." />
             )}
-            <NumberField label="Ativa após lucro de" suffix="%" value={risk.trailing_activation_pct} onChange={(v) => set("trailing_activation_pct", v)} />
+            <NumberField label="Começa a seguir após" suffix="% de lucro" value={risk.trailing_activation_pct} onChange={(v) => set("trailing_activation_pct", v)} help="Antes disso vale só o stop loss normal." />
           </div>
         )}
         <div className="space-y-2">
-          <div className="text-xs font-medium text-ink-2">Alvos parciais (vende parte da posição ao atingir o lucro)</div>
+          <div className="text-xs font-medium text-ink-2">Alvos parciais</div>
+          <p className="text-xs text-muted">Vende uma parte da posição quando o lucro chega em X%. O restante segue até o sinal de saída ou o stop.</p>
           {tps.map((tp, i) => (
             <div key={i} className="flex items-end gap-2">
               <NumberField label="Lucro" suffix="%" value={tp.pct} onChange={(v) => set("take_profits", tps.map((t, j) => (j === i ? { ...t, pct: v } : t)))} />
@@ -201,21 +261,20 @@ export function RiskForm({ risk, onChange, quote = "USDT" }: { risk: RiskConfig;
             </div>
           ))}
           {tps.length < 5 && (
-            <Button type="button" size="sm" variant="ghost" onClick={() => set("take_profits", [...tps, { pct: (tps.at(-1)?.pct ?? 0) + 5, size_pct: 25 }])}>
+            <Button type="button" size="sm" variant="ghost" onClick={() => set("take_profits", [...tps, { pct: (tps.at(-1)?.pct ?? 5) + 5, size_pct: 25 }])}>
               <Plus className="size-4" /> Adicionar alvo
             </Button>
           )}
         </div>
-      </section>
+      </Section>
 
-      <section className="space-y-3">
-        <h3 className="text-xs font-semibold tracking-wide text-muted uppercase">Disciplina</h3>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <NumberField label="Pausa após saída" suffix="candles" value={risk.cooldown_bars} step={1} onChange={(v) => set("cooldown_bars", Math.round(v))} />
-          <NumberField label="Perda diária máxima" suffix={quote} value={risk.max_daily_loss_quote} step={1} onChange={(v) => set("max_daily_loss_quote", v)} help="Bloqueia novas compras no dia. 0 = desligado" />
-          <NumberField label="Taxa da corretora" suffix="%" value={risk.fee_pct} step={0.01} onChange={(v) => set("fee_pct", v)} help="Binance: 0,1% (0,075% com BNB)" />
+      <Section title="Disciplina" intro="Regras que evitam excessos depois de perdas ou de saídas.">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <NumberField label="Pausa após vender" suffix="candles" value={risk.cooldown_bars} step={1} onChange={(v) => set("cooldown_bars", Math.round(v))} help="Espera N candles antes de comprar de novo, para não reentrar no mesmo movimento que acabou de sair." />
+          <NumberField label="Perda diária máxima" suffix={quote} value={risk.max_daily_loss_quote} step={1} onChange={(v) => set("max_daily_loss_quote", v)} help="Se as operações fechadas no dia somarem essa perda, não compra mais até o dia seguinte (horário UTC). 0 = desligado." />
+          <NumberField label="Taxa da corretora" suffix="% por ordem" value={risk.fee_pct} step={0.01} onChange={(v) => set("fee_pct", v)} help="Descontada de cada compra e venda no resultado. Binance: 0,1% (0,075% pagando a taxa com BNB)." />
         </div>
-      </section>
+      </Section>
     </div>
   );
 }

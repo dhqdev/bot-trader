@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, FlaskConical } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { defaultParams, INTERVALS, ParamsForm, RiskForm, StrategyPicker, useStrategies, useSymbols, type Params } from "../components/forms";
+import { defaultParams, HELP, INTERVALS, ParamsForm, RiskForm, StrategyPicker, useStrategies, useSymbols, type Params } from "../components/forms";
 import { Button, Card, ErrorBox, Field, Input, Loading, PageHeader, Segmented, Select } from "../components/ui";
 import { api } from "../lib/api";
 import { INTERVAL_LABELS } from "../lib/format";
@@ -31,7 +31,7 @@ export function BotFormPage() {
 
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("BTCUSDT");
-  const [interval, setTimeframe] = useState("1h");
+  const [interval, setTimeframe] = useState("4h");
   const [mode, setMode] = useState<Mode>("paper");
   const [paperBalance, setPaperBalance] = useState(1000);
   const [strategy, setStrategy] = useState("");
@@ -61,6 +61,7 @@ export function BotFormPage() {
       setRisk({ ...draft.risk, sizing_mode: "fixed_quote" });
     } else {
       const key = strategies.data.default;
+      setTimeframe(strategies.data.default_interval);
       setStrategy(key);
       setParams(defaultParams(strategies.data.strategies.find((s) => s.key === key)));
       setRisk(strategies.data.default_risk);
@@ -113,11 +114,11 @@ export function BotFormPage() {
       />
       <div className="space-y-4">
         <Card title="Básico">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Nome">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Nome" help="Só para você identificar o bot.">
               <Input value={name} placeholder={`${symbol} ${interval}`} onChange={(e) => setName(e.target.value)} />
             </Field>
-            <Field label="Par" help={editing ? "O par não pode ser alterado." : undefined}>
+            <Field label="Par" help={editing ? "O par não pode ser alterado depois de criado." : HELP.symbol}>
               <Input
                 list="symbols"
                 value={symbol}
@@ -129,15 +130,15 @@ export function BotFormPage() {
                 {symbols.data?.map((s) => <option key={s.symbol} value={s.symbol} />)}
               </datalist>
             </Field>
-            <Field label="Tempo do candle">
+            <Field label="Tempo do candle" help={HELP.interval}>
               <Select value={interval} onChange={(e) => setTimeframe(e.target.value)}>
                 {INTERVALS.map((i) => (
-                  <option key={i} value={i}>{INTERVAL_LABELS[i]}</option>
+                  <option key={i} value={i}>{INTERVAL_LABELS[i]}{i === strategies.data!.default_interval ? " (recomendado)" : ""}</option>
                 ))}
               </Select>
             </Field>
             {!editing && mode === "paper" && (
-              <Field label="Saldo simulado (USDT)">
+              <Field label="Saldo simulado (USDT)" help="Dinheiro fictício com que o bot começa no modo simulado.">
                 <Input type="number" min={10} value={paperBalance} onChange={(e) => setPaperBalance(Number(e.target.value))} />
               </Field>
             )}
@@ -151,6 +152,7 @@ export function BotFormPage() {
                 { value: "live", label: "Real (dinheiro de verdade)" },
               ]}
             />
+            {mode === "paper" && <span className="text-xs text-ink-2">Ordens fictícias com preços reais da Binance, taxa e slippage. Ideal para testar sem risco.</span>}
             {mode === "live" && (
               <span className="flex items-center gap-1.5 text-xs text-warn-text">
                 <AlertTriangle className="size-3.5" />
@@ -161,6 +163,7 @@ export function BotFormPage() {
         </Card>
 
         <Card title="Estratégia">
+          <p className="-mt-1 mb-3 text-xs text-ink-2">A estratégia decide quando comprar e quando vender. Estão em ordem de desempenho nos testes; a primeira é a recomendada.</p>
           <StrategyPicker
             strategies={strategies.data!.strategies}
             value={strategy}
@@ -178,6 +181,7 @@ export function BotFormPage() {
         </Card>
 
         <Card title="Gerenciamento de risco">
+          <p className="-mt-1 mb-4 text-xs text-ink-2">Quanto investir em cada compra e como limitar perdas. Os padrões foram os que deram melhor resultado nos testes.</p>
           <RiskForm risk={risk} onChange={setRisk} quote={quote || "USDT"} />
         </Card>
         <ErrorBox error={save.error} />

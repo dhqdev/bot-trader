@@ -25,7 +25,7 @@ Se o PowerShell bloquear: `powershell -ExecutionPolicy Bypass -File .\start.ps1`
 
 1. **Crie sua conta.** O primeiro cadastro vira o dono do sistema; depois disso o cadastro fecha.
 2. **Configurações:** cole as chaves da Binance (e, se quiser a IA, a chave da Anthropic). Elas são criptografadas no banco e nunca voltam para a tela.
-3. **Laboratório:** teste estratégias no par que você quer operar. Use "Comparar todas as estratégias".
+3. **Laboratório:** teste estratégias no par que você quer operar, em candles de 4 horas. Use "Comparar todas as estratégias" e leia a análise automática do resultado.
 4. **Bots → Novo bot**, em modo **Simulado**. Ele usa preços reais, com taxa e slippage, sem gastar dinheiro.
 5. Acompanhe pelo **Painel**. Quando estiver confiante, edite o bot e troque para **Real**.
 
@@ -36,39 +36,52 @@ O botão **Sistema ligado/desligado**, no topo, para ou retoma todos os bots de 
 - **Painel:** resultado total (realizado + em aberto), hoje, taxa de acerto, curva de resultado acumulado, resultado por dia, bots, resultado por estratégia, últimas operações e atividade. Separa **Real** de **Simulado**.
 - **Bots:** status, tempo de operação e resultado de cada bot.
 - **Detalhe do bot:** gráfico de candles com indicadores, compras e vendas, linhas de entrada/stop/alvo, a lista de **condições da estratégia** (o que falta para comprar ou vender), posição aberta, operações, ordens e log de eventos. Tem os botões para ligar/parar, encerrar a posição e analisar com IA.
-- **Laboratório:** backtest com taxa, slippage, stop e alvos; comparação contra o buy & hold; comparação entre estratégias; "Criar bot com esta configuração".
+- **Laboratório:** guia de uso, explicação de cada campo, backtest com taxa, slippage, stop e alvos, comparação contra o buy & hold e entre estratégias, leitura automática do resultado e "Criar bot com esta configuração".
 - **Análise IA:** chat com o Claude. Ele consulta seus bots, o mercado e **roda backtests** para embasar as respostas. Só lê dados: não envia ordens nem altera bots. Os relatórios ficam salvos.
 
 ## Estratégias
 
-Todas são long-only (só compram), avaliadas **apenas em candles fechados**. O sinal do backtest é exatamente o mesmo da operação real, e isso é testado.
+Todas são long-only (só compram) e avaliadas **apenas em candles fechados**. O sinal do backtest é exatamente o mesmo da operação real, e isso é testado. **Use candles de 4 horas**: nos testes, 1 hora ou menos perdeu em quase todas as estratégias por causa do ruído e das taxas.
 
-| Estratégia | Estilo | Resumo |
+| Estratégia | Estilo | Como funciona |
 |---|---|---|
-| **Confluência de tendência** (padrão) | tendência | Preço acima da EMA 200, EMA 9 cruzando a 21 há até 10 candles e 4 de 5 confirmações (Supertrend, MACD, RSI, ADX, volume). Sai quando a EMA 9 perde a 21 ou o Supertrend vira. |
+| **Squeeze: compressão e rompimento** (nova, recomendada) | rompimento | Espera o preço ficar comprimido (Bollinger dentro do Keltner) por 8+ candles e compra quando a compressão se desfaz com momentum para cima. Sai quando o preço perde a média do canal. |
+| **Candle de ignição** (nova) | momentum | Compra o candle que "acende" o movimento: alta de 1,5× o ATR, volume 1,5× a média e fechamento perto da máxima. Sai ao perder a EMA 20. |
+| **Momentum ajustado à volatilidade** (nova) | momentum | Compra quando o retorno dos últimos 30 candles, dividido pela volatilidade esperada, passa de 1 desvio (z-score). Sai quando a força some. |
+| Confluência de tendência | tendência | EMA 9 cruzando a 21 há até 10 candles, acima da EMA 200, com 4 de 5 confirmações (Supertrend, MACD, RSI, ADX, volume). |
+| Rompimento Donchian (Tartarugas) | rompimento | Compra na máxima de 20 candles com volume e ADX; vende na mínima de 10. |
 | HiLo + RSI (ChiloRSI v2) | tendência | Evolução da estratégia que o bot antigo usava: entra logo após o HiLo (55) virar, com filtros de RSI, tendência e ATR%. |
-| Supertrend + EMA | tendência | Evolução do UT Bot Alerts. |
-| Cruzamento de EMAs + ADX | tendência | Evolução das médias móveis: só cruzamentos recentes, com ADX e volume. |
-| Rompimento Donchian | rompimento | Sistema das Tartarugas (máxima de 20 / mínima de 10). |
-| Momentum MACD | momentum | Cruzamento do MACD abaixo de zero com tendência. |
-| Reversão Bollinger + RSI | reversão | Compra quedas exageradas em tendência de alta. Opera pouco e tem drawdown baixo. |
 
-### Como os padrões foram escolhidos (e o que esperar)
+Cada parâmetro tem, na tela, a explicação do que faz e a faixa aceita. O Laboratório tem um guia de uso e uma leitura automática do resultado.
 
-Os padrões vieram de backtests com dados reais da Binance em 14 pares (BTC, ETH, SOL, BNB, XRP, LINK, ADA, DOGE, AVAX, DOT, LTC, TRX, NEAR, JUP), em candles de 1h (180 dias) e 4h (365 dias), com dois períodos seguidos. São 56 casos, com taxa de 0,1% e slippage de 0,05%:
+### Como foram escolhidas (e o que esperar)
 
-| | Mediana (recente / anterior) | Casos com lucro | Bate o buy & hold | Pior caso |
-|---|---|---|---|---|
-| Configuração antiga (ChiloRSI + stop 5%, trailing 3%, alvos 5/10/20%) | −14,2% / −19,4% | 9 de 56 | 20 de 56 | −67,8% |
-| **Confluência de tendência** | **+0,2% / +10,4%** | **29 de 56** | **37 de 56** | −43,0% |
-| Buy & hold | −3,2% / −39,5% | | | |
+Backtests com dados reais da Binance em 14 pares, em candles de 1h (180 dias) e 4h (365 dias), com 3 períodos seguidos (83 casos). Taxa de 0,1%, slippage de 0,05% e o risco padrão.
+
+- **Design:** 7 pares (BTC, ETH, SOL, BNB, XRP, LINK, ADA) nos 2 períodos mais recentes. Foram testadas 14 ideias novas (KAMA, Squeeze, RSI(2), regressão linear, Ichimoku, Heikin-Ashi, momentum/volatilidade, OBV, pullback na tendência, candle de ignição, canal ATR, impulso de Elder, Aroon e StochRSI). Ficaram as 3 melhores.
+- **Validação:** 7 pares que não participaram da escolha (DOGE, AVAX, DOT, LTC, TRX, NEAR, JUP), mais o período mais antigo dos 7 primeiros.
+
+Resultado com todas as estratégias na mesma janela de teste:
+
+| Estratégia | Mediana no 4h | Com lucro no 4h | Mediana (todos os casos) | Fora da amostra (mediana) | Pior caso |
+|---|---|---|---|---|---|
+| **Squeeze** | +20,9% | 71% | +8,9% | +4,0% | **−36,7%** |
+| **Candle de ignição** | +20,5% | 71% | +8,4% | +4,5% | −40,5% |
+| **Momentum/volatilidade** | +21,3% | 71% | +4,7% | +2,3% | −58,1% |
+| Confluência | +17,7% | 73% | +8,3% | +2,8% | −45,1% |
+| Donchian | +13,4% | 68% | +3,4% | **+7,6%** | −48,9% |
+| HiLo + RSI | +12,0% | 61% | +0,5% | +1,0% | −39,7% |
+| Buy & hold | +12,5% | | +10,7% | +19,4% | |
+
+**Removidas por desempenho fraco:** Supertrend (−3,5% fora da amostra), Cruzamento de EMAs (−4,0%), Momentum MACD (−4,2%) e Reversão Bollinger (quase não operava: ~2 operações por período). Bots que usavam alguma delas são migrados automaticamente para a substituta, com um aviso no log.
 
 O que isso significa:
 
-- **A melhora sobre o bot antigo é grande e consistente**, e a maior parte do ganho vem da proteção em quedas.
-- **Não é lucro garantido.** Nos pares que não foram usados para escolher os parâmetros (DOGE, AVAX, DOT, LTC, TRX, NEAR, JUP), a Confluência ficou em −17,9% / +2,6%, contra −1,1% / −50,8% do buy & hold.
-- **O que mais pesou foi entrar cedo** (só logo após o gatilho) e **sair só na reversão**. Break-even cedo, trailing apertado e alvos curtos cortavam as tendências vencedoras, por isso vêm desligados. Continuam disponíveis no formulário de risco.
-- **Teste cada par no Laboratório, em mais de um período, e rode em simulado antes do real.**
+- **Em 4h, as 3 novas lideram**, e a Squeeze tem o menor drawdown e o melhor pior caso.
+- **Em alta forte, segurar a moeda ganha.** No período mais antigo (alta forte), o buy & hold superou todas. As estratégias ganham principalmente **protegendo nas quedas**, porque ficam em USDT boa parte do tempo.
+- **O Momentum/volatilidade tem o maior drawdown.** Se usar, prefira posições menores.
+- A configuração antiga do bot (ChiloRSI + stop 5%, trailing 3%, alvos 5/10/20%) teve mediana entre −14% e −19% nos mesmos tipos de teste.
+- **Nada disso é garantia.** Teste o par no Laboratório em mais de um período e rode em modo simulado antes do real.
 
 ### Gerenciamento de risco (por bot)
 
@@ -134,7 +147,7 @@ backend/
     api/             rotas REST (auth, bots, painel, mercado, backtest, IA, configurações)
     services/        estatísticas, backtests, análise de mercado, agente de IA
     models.py        tabelas (SQLAlchemy): usuários, chaves, bots, posições, ordens, eventos, relatórios
-  tests/             68 testes: indicadores, ausência de look-ahead, risco, backtest, motor, API, IA
+  tests/             66 testes: indicadores, ausência de look-ahead, risco, backtest, motor, API, IA
 frontend/            React + Vite + TypeScript + Tailwind (lightweight-charts e Recharts)
 legacy/              código antigo, preservado para consulta (pode apagar)
 deploy/portainer-stack.yml   stack para o Portainer (usa a imagem do GHCR)

@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.core.exchange import INTERVAL_MINUTES
 from app.core.risk import RiskConfig
-from app.core.strategies import DEFAULT_STRATEGY, STRATEGIES
+from app.core.strategies import DEFAULT_INTERVAL, DEFAULT_STRATEGY, STRATEGIES
 
 
 class RegisterIn(BaseModel):
@@ -60,7 +60,7 @@ def _check_strategy(v: str) -> str:
 class BotIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     symbol: str = Field(min_length=4, max_length=32)
-    interval: str = "1h"
+    interval: str = DEFAULT_INTERVAL
     strategy: str = DEFAULT_STRATEGY
     strategy_params: dict = Field(default_factory=dict)
     risk: RiskConfig = Field(default_factory=RiskConfig)
@@ -104,11 +104,11 @@ class BotUpdate(BaseModel):
 
 class BacktestIn(BaseModel):
     symbol: str = Field(min_length=4, max_length=32)
-    interval: str = "1h"
+    interval: str = DEFAULT_INTERVAL
     strategy: str = DEFAULT_STRATEGY
     params: dict = Field(default_factory=dict)
     risk: RiskConfig = Field(default_factory=RiskConfig)
-    days: int = Field(90, ge=3, le=730)
+    days: int = Field(365, ge=3, le=730)
     initial_capital: float = Field(1000.0, gt=0, le=10_000_000)
 
     @field_validator("interval")

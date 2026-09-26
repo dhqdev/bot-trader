@@ -18,7 +18,7 @@ def test_backtest_runs(key, ohlcv):
 
 
 def test_pnl_is_consistent_with_equity(ohlcv):
-    res = run_backtest(ohlcv, "supertrend", None, RiskConfig(sizing_mode="percent_balance", balance_percent=100), "1h", 1000)
+    res = run_backtest(ohlcv, "squeeze", None, RiskConfig(sizing_mode="percent_balance", balance_percent=100), "1h", 1000)
     total_pnl = sum(t["pnl"] for t in res["trades"])
     assert res["metrics"]["final_equity"] == pytest.approx(1000 + total_pnl, abs=0.05)
 
@@ -26,8 +26,8 @@ def test_pnl_is_consistent_with_equity(ohlcv):
 def test_fees_cost_money():
     """Com taxa e slippage altas, a mesma estratégia deve render menos."""
     df = make_ohlcv(2000, seed=3)
-    cheap = run_backtest(df, "ema_cross", None, RiskConfig(fee_pct=0.0, sizing_mode="percent_balance", balance_percent=100), "1h", 1000, slippage_pct=0)
-    pricey = run_backtest(df, "ema_cross", None, RiskConfig(fee_pct=1.0, sizing_mode="percent_balance", balance_percent=100), "1h", 1000, slippage_pct=0.5)
+    cheap = run_backtest(df, "confluence", None, RiskConfig(fee_pct=0.0, sizing_mode="percent_balance", balance_percent=100), "1h", 1000, slippage_pct=0)
+    pricey = run_backtest(df, "confluence", None, RiskConfig(fee_pct=1.0, sizing_mode="percent_balance", balance_percent=100), "1h", 1000, slippage_pct=0.5)
     assert cheap["metrics"]["trades"] > 0
     assert pricey["metrics"]["final_equity"] < cheap["metrics"]["final_equity"]
 

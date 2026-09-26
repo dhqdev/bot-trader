@@ -28,6 +28,7 @@ class Param:
     step: float | None = None
     options: list[str] | None = None
     help: str = ""
+    labels: list[str] | None = None  # rótulos legíveis das opções (mesma ordem de options)
 
 
 @dataclass

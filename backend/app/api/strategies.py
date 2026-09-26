@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.core.risk import RiskConfig
-from app.core.strategies import DEFAULT_STRATEGY, STRATEGIES
+from app.core.strategies import DEFAULT_INTERVAL, DEFAULT_STRATEGY, STRATEGIES
 from app.deps import get_current_user
 from app.schemas import BacktestIn
 from app.services import backtesting
@@ -15,6 +15,7 @@ router = APIRouter(tags=["strategies"], dependencies=[Depends(get_current_user)]
 def list_strategies():
     return {
         "default": DEFAULT_STRATEGY,
+        "default_interval": DEFAULT_INTERVAL,
         "strategies": [s.describe() for s in STRATEGIES.values()],
         "default_risk": RiskConfig().model_dump(),
     }

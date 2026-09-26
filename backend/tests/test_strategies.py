@@ -16,7 +16,7 @@ def test_output_shape(key, ohlcv):
     assert all("label" in c and "ok" in c for c in snap["entry_checks"])
 
 
-RELAXED = {"bb_reversion": {"rsi_entry": 40, "use_trend_filter": False}}  # seletiva demais p/ dados sintéticos
+RELAXED: dict = {}  # parâmetros mais soltos para estratégias seletivas demais nos dados sintéticos
 
 
 @pytest.mark.parametrize("key", list(STRATEGIES))
@@ -50,8 +50,15 @@ def test_resolve_params_clamps_and_defaults():
 def test_fast_slow_pairs_are_ordered():
     p = STRATEGIES["confluence"].resolve_params({"ema_fast": 30, "ema_slow": 10})
     assert (p["ema_fast"], p["ema_slow"]) == (10, 30)
-    p = STRATEGIES["ema_cross"].resolve_params({"fast": 21, "slow": 21})
-    assert p["fast"] < p["slow"]
+    p = STRATEGIES["confluence"].resolve_params({"ema_fast": 21, "ema_slow": 21})
+    assert p["ema_fast"] < p["ema_slow"]
+
+
+def test_removed_strategies_resolve_to_replacement():
+    from app.core.strategies import REMOVED, get_strategy
+
+    for old, new in REMOVED.items():
+        assert get_strategy(old).key == new
 
 
 def test_describe_is_serializable():

@@ -21,7 +21,7 @@ from app.config import get_settings
 from app.core import indicators as ta
 from app.core.exchange import BinanceTrader, MarketData, PaperTrader, SymbolRules, get_market, interval_ms, now_ms
 from app.core.risk import PositionState, RiskConfig, open_position, position_size_quote, update
-from app.core.strategies import get_strategy
+from app.core.strategies import REMOVED, get_strategy
 from app.db import session_scope
 from app.models import Bot, BotEvent, Credential, Order, Position, SystemState, utcnow
 from app.security import decrypt
@@ -471,6 +471,12 @@ class BotManager:
         self.started_at = utcnow()
         with session_scope() as db:
             enabled = self._system(db).engine_enabled
+            # bots com estratégias removidas passam para a substituta, com parâmetros padrão
+            for bot in db.scalars(select(Bot).where(Bot.strategy.in_(list(REMOVED)))):
+                old, new = bot.strategy, get_strategy(bot.strategy)
+                bot.strategy, bot.strategy_params = new.key, new.resolve_params(None)
+                bot.last_candle_time = None
+                add_event(db, bot.id, "warn", f"A estratégia '{old}' foi removida por desempenho fraco nos testes. Bot migrado para '{new.name}' com parâmetros padrão.")
             # recupera o tempo de execução de bots interrompidos por queda do servidor
             for bot in db.scalars(select(Bot).where(Bot.started_at.is_not(None))):
                 if bot.last_tick_at and bot.last_tick_at > bot.started_at:

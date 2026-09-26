@@ -91,8 +91,8 @@ def test_invalid_bot_input(client):
 
 def test_strategies_and_backtest(client):
     data = client.get("/api/strategies").json()
-    assert data["default"] == "confluence" and len(data["strategies"]) == 7
-    r = client.post("/api/backtest", json={"symbol": "SOLUSDT", "interval": "1h", "strategy": "supertrend", "days": 60})
+    assert data["default"] == "squeeze" and data["default_interval"] == "4h" and len(data["strategies"]) == 6
+    r = client.post("/api/backtest", json={"symbol": "SOLUSDT", "interval": "1h", "strategy": "squeeze", "days": 60})
     assert r.status_code == 200, r.text
     res = r.json()
     assert "metrics" in res and res["candles"] and res["equity_curve"]

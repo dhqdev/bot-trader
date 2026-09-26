@@ -208,3 +208,17 @@ def test_live_sell_does_not_count_coins_missing_from_wallet(scripted):
     # recebeu só pela metade vendida: o resultado não é inflado pela metade que não existia
     assert pos.proceeds_quote == pytest.approx(pos.cost_quote / 2, rel=0.02)
     assert pos.pnl_pct == pytest.approx(-50, abs=1.5)
+
+
+def test_bots_with_removed_strategy_are_migrated():
+    bot_id = _make_bot()
+    with session_scope() as db:
+        bot = db.get(Bot, bot_id)
+        bot.strategy, bot.strategy_params, bot.status = "supertrend", {"multiplier": 4}, "stopped"
+    manager.start()
+    with session_scope() as db:
+        bot = db.get(Bot, bot_id)
+        assert bot.strategy == "confluence"
+        assert bot.strategy_params["ema_fast"] == 9  # padrões da substituta
+        msgs = [e.message for e in db.scalars(select(BotEvent).where(BotEvent.bot_id == bot_id))]
+    assert any("removida" in m for m in msgs)

@@ -1,7 +1,40 @@
 import clsx from "clsx";
-import { Loader2, X } from "lucide-react";
-import { useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { Info, Loader2, X } from "lucide-react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 import { pct, signedMoney } from "../lib/format";
+
+/** Ícone (i) que abre uma explicação ao clicar (funciona no celular, ao contrário do hover). */
+export function InfoTip({ children, className }: { children: ReactNode; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  return (
+    <span ref={ref} className={clsx("relative inline-flex align-middle", className)}>
+      <button
+        type="button"
+        aria-label="O que é isto?"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen(!open);
+        }}
+        className="rounded-full text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        <Info className="size-3.5" />
+      </button>
+      {open && (
+        <span role="tooltip" className="absolute top-5 left-1/2 z-40 w-72 max-w-[80vw] -translate-x-1/2 rounded-lg border border-line bg-surface p-3 text-xs leading-relaxed font-normal text-ink-2 shadow-xl">
+          {children}
+        </span>
+      )}
+    </span>
+  );
+}
 
 export function Card({ title, action, children, className, padded = true }: {
   title?: ReactNode;
@@ -261,10 +294,13 @@ export function Pnl({ value, quote, percent, proportional, className }: {
   return <span className={clsx(!proportional && "tabular", tone, className)}>{quote === "" ? text.trim() : text}</span>;
 }
 
-export function Stat({ label, value, sub, className }: { label: string; value: ReactNode; sub?: ReactNode; className?: string }) {
+export function Stat({ label, value, sub, info, className }: { label: string; value: ReactNode; sub?: ReactNode; info?: ReactNode; className?: string }) {
   return (
     <div className={clsx("rounded-xl border border-line bg-surface px-4 py-3", className)}>
-      <div className="text-xs text-ink-2">{label}</div>
+      <div className="flex items-center gap-1.5 text-xs text-ink-2">
+        {label}
+        {info && <InfoTip>{info}</InfoTip>}
+      </div>
       <div className="mt-1 text-lg font-semibold text-ink">{value}</div>
       {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
     </div>
