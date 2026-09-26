@@ -1,0 +1,105 @@
+const nf = (min: number, max: number) =>
+  new Intl.NumberFormat("pt-BR", { minimumFractionDigits: min, maximumFractionDigits: max });
+
+const n2 = nf(2, 2);
+const compact = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
+
+export function money(v: number | null | undefined, quote = "USDT"): string {
+  if (v == null || Number.isNaN(v)) return "–";
+  return `${n2.format(v)} ${quote}`;
+}
+
+export function signedMoney(v: number | null | undefined, quote = "USDT"): string {
+  if (v == null || Number.isNaN(v)) return "–";
+  const sign = v > 0 ? "+" : v < 0 ? "−" : "";
+  return `${sign}${n2.format(Math.abs(v))} ${quote}`;
+}
+
+export function pct(v: number | null | undefined, signed = false, digits = 2): string {
+  if (v == null || Number.isNaN(v)) return "–";
+  const sign = signed ? (v > 0 ? "+" : v < 0 ? "−" : "") : v < 0 ? "−" : "";
+  return `${sign}${nf(digits, digits).format(Math.abs(v))}%`;
+}
+
+/** Preço com casas decimais adaptadas à grandeza (BTC vs. moedas baratas). */
+export function price(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(v)) return "–";
+  const a = Math.abs(v);
+  const digits = a >= 1000 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 5 : 8;
+  return nf(Math.min(2, digits), digits).format(v);
+}
+
+export function qty(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(v)) return "–";
+  return nf(0, v >= 100 ? 2 : 6).format(v);
+}
+
+export function num(v: number | null | undefined, digits = 2): string {
+  if (v == null || Number.isNaN(v)) return "–";
+  return nf(0, digits).format(v);
+}
+
+export function compactNum(v: number): string {
+  return compact.format(v);
+}
+
+export function duration(seconds: number | null | undefined): string {
+  if (seconds == null || seconds < 0) return "–";
+  const s = Math.floor(seconds);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}min`;
+  if (m > 0) return `${m}min`;
+  return `${s}s`;
+}
+
+export function dateTime(v: string | number | null | undefined): string {
+  if (v == null) return "–";
+  const d = typeof v === "number" ? new Date(v) : new Date(v);
+  return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+export function shortDate(v: string | number): string {
+  const d = new Date(v);
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+export function timeAgo(v: string | null | undefined): string {
+  if (!v) return "–";
+  const diff = (Date.now() - new Date(v).getTime()) / 1000;
+  if (diff < 60) return "agora";
+  if (diff < 3600) return `há ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `há ${Math.floor(diff / 3600)} h`;
+  return `há ${Math.floor(diff / 86400)} d`;
+}
+
+export const REASONS: Record<string, string> = {
+  signal: "Sinal",
+  stop_loss: "Stop loss",
+  breakeven: "Break-even",
+  trailing_stop: "Trailing stop",
+  take_profit: "Alvo parcial",
+  manual: "Manual",
+  end: "Fim do teste",
+};
+
+export const INTERVAL_LABELS: Record<string, string> = {
+  "1m": "1 minuto",
+  "3m": "3 minutos",
+  "5m": "5 minutos",
+  "15m": "15 minutos",
+  "30m": "30 minutos",
+  "1h": "1 hora",
+  "2h": "2 horas",
+  "4h": "4 horas",
+  "6h": "6 horas",
+  "8h": "8 horas",
+  "12h": "12 horas",
+  "1d": "1 dia",
+};
+
+export const INTERVAL_MINUTES_MAP: Record<string, number> = {
+  "1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "2h": 120, "4h": 240, "6h": 360, "8h": 480, "12h": 720, "1d": 1440,
+};

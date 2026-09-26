@@ -1,0 +1,206 @@
+import clsx from "clsx";
+import type { ReactNode } from "react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Check, Info, Radio, X } from "lucide-react";
+import { dateTime, duration, num, pct, price, qty, REASONS, timeAgo } from "../lib/format";
+import type { Bot, BotEvent, OrderRow, Position, Snapshot } from "../lib/types";
+import { Badge, Dot, Empty, Pnl } from "./ui";
+
+export function ModeBadge({ mode }: { mode: Bot["mode"] }) {
+  return mode === "live" ? <Badge tone="warn">Real</Badge> : <Badge tone="accent">Simulado</Badge>;
+}
+
+export function StatusBadge({ bot }: { bot: Pick<Bot, "status" | "running" | "status_reason"> }) {
+  if (bot.status === "error") return <Badge tone="bad"><Dot tone="bad" />Erro</Badge>;
+  if (bot.status === "running" && bot.running) return <Badge tone="good"><Dot tone="good" />Operando</Badge>;
+  if (bot.status === "running") return <Badge tone="warn"><Dot tone="warn" />Aguardando sistema</Badge>;
+  return <Badge><Dot tone="neutral" />Parado</Badge>;
+}
+
+export function ChecksList({ snapshot, quote }: { snapshot: Snapshot | null | undefined; quote?: string }) {
+  if (!snapshot) return <Empty title="Sem avaliação ainda">As condições aparecem após o primeiro candle fechado.</Empty>;
+  const required = snapshot.entry_checks.filter((c) => !c.label.startsWith("· "));
+  const info = snapshot.entry_checks.filter((c) => c.label.startsWith("· "));
+  return (
+    <div className="space-y-4 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        {snapshot.entry ? <Badge tone="good">Sinal de compra</Badge> : snapshot.exit ? <Badge tone="bad">Sinal de venda</Badge> : <Badge>Sem sinal</Badge>}
+        {snapshot.candle_time && <span className="text-xs text-muted">candle de {dateTime(snapshot.candle_time)}</span>}
+        {snapshot.close != null && <span className="text-xs text-muted">fechou em {price(snapshot.close)} {quote}</span>}
+      </div>
+      <div>
+        <div className="mb-1.5 text-xs font-medium text-ink-2">Para comprar (todas)</div>
+        <CheckRows checks={required} />
+        {info.length > 0 && (
+          <div className="mt-2 border-l border-line pl-3">
+            <CheckRows checks={info.map((c) => ({ ...c, label: c.label.slice(2) }))} muted />
+          </div>
+        )}
+      </div>
+      <div>
+        <div className="mb-1.5 text-xs font-medium text-ink-2">Para vender (qualquer uma)</div>
+        <CheckRows checks={snapshot.exit_checks} />
+      </div>
+      {Object.keys(snapshot.values).length > 0 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-3 text-xs">
+          {Object.entries(snapshot.values).map(([k, v]) => (
+            <span key={k} className="text-ink-2">
+              {k} <span className="font-medium text-ink tabular">{num(v, 2)}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CheckRows({ checks, muted }: { checks: { label: string; ok: boolean }[]; muted?: boolean }) {
+  return (
+    <ul className="space-y-1">
+      {checks.map((c) => (
+        <li key={c.label} className={clsx("flex items-start gap-2", muted && "text-xs")}>
+          {c.ok ? <Check className="mt-0.5 size-4 shrink-0 text-good-text" aria-label="atendida" /> : <X className="mt-0.5 size-4 shrink-0 text-muted" aria-label="não atendida" />}
+          <span className={c.ok ? "text-ink" : "text-ink-2"}>{c.label}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const EVENT_ICON = {
+  trade: <ArrowUpRight className="size-3.5 text-accent" />,
+  signal: <Radio className="size-3.5 text-muted" />,
+  info: <Info className="size-3.5 text-muted" />,
+  warn: <AlertTriangle className="size-3.5 text-warn-text" />,
+  error: <AlertTriangle className="size-3.5 text-bad-text" />,
+};
+
+export function EventsList({ events, showBot }: { events: BotEvent[]; showBot?: boolean }) {
+  if (!events.length) return <Empty title="Nenhum evento ainda" />;
+  return (
+    <ul className="divide-y divide-line">
+      {events.map((e) => (
+        <li key={e.id} className="flex items-start gap-2.5 py-2 text-sm">
+          <span className="mt-0.5" aria-label={e.level}>{EVENT_ICON[e.level] ?? EVENT_ICON.info}</span>
+          <div className="min-w-0 flex-1">
+            <div className={clsx(e.level === "error" ? "text-bad-text" : e.level === "trade" ? "text-ink" : "text-ink-2", "break-words")}>
+              {showBot && e.bot_name && <span className="mr-1.5 font-medium text-ink">{e.bot_name}:</span>}
+              {e.message}
+            </div>
+          </div>
+          <span className="shrink-0 text-xs text-muted" title={dateTime(e.created_at)}>{timeAgo(e.created_at)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function PositionsTable({ positions, quote, showBot, compact }: { positions: Position[]; quote?: string; showBot?: boolean; compact?: boolean }) {
+  if (!positions.length) return <Empty title="Nenhuma operação ainda" />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm tabular">
+        <thead>
+          <tr className="border-b border-line text-left text-xs text-ink-2">
+            {showBot && <th className="py-2 pr-3 font-medium">Bot</th>}
+            <th className="py-2 pr-3 font-medium">{compact ? "Quando" : "Entrada"}</th>
+            <th className="py-2 pr-3 text-right font-medium">Preço entrada</th>
+            <th className="py-2 pr-3 text-right font-medium">Preço saída</th>
+            {!compact && <th className="py-2 pr-3 text-right font-medium">Valor</th>}
+            <th className="py-2 pr-3 font-medium">Motivo</th>
+            {!compact && <th className="py-2 pr-3 text-right font-medium">Duração</th>}
+            <th className="py-2 text-right font-medium">Resultado</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {positions.map((p) => {
+            const open = p.status === "open";
+            const result = open ? p.unrealized_pnl : p.pnl_quote;
+            const resultPct = open ? p.unrealized_pct : p.pnl_pct;
+            return (
+              <tr key={p.id}>
+                {showBot && <td className="py-2 pr-3 text-ink-2">{p.bot_name}</td>}
+                <td className="py-2 pr-3 whitespace-nowrap text-ink-2">{compact ? timeAgo(p.exit_time ?? p.entry_time) : dateTime(p.entry_time)}</td>
+                <td className="py-2 pr-3 text-right">{price(p.entry_price)}</td>
+                <td className="py-2 pr-3 text-right">{open ? <span className="text-muted">aberta</span> : price(p.exit_price)}</td>
+                {!compact && <td className="py-2 pr-3 text-right text-ink-2">{num(p.cost_quote)}</td>}
+                <td className="py-2 pr-3 whitespace-nowrap text-ink-2">{open ? "–" : REASONS[p.exit_reason] ?? p.exit_reason}</td>
+                {!compact && <td className="py-2 pr-3 text-right text-ink-2">{duration(p.duration_seconds)}</td>}
+                <td className="py-2 text-right whitespace-nowrap">
+                  <Pnl value={result} quote={compact ? "" : quote} />{" "}
+                  {!compact && <span className="text-xs text-muted">({pct(resultPct, true)})</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function OrdersTable({ orders, quote }: { orders: OrderRow[]; quote: string }) {
+  if (!orders.length) return <Empty title="Nenhuma ordem ainda" />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm tabular">
+        <thead>
+          <tr className="border-b border-line text-left text-xs text-ink-2">
+            <th className="py-2 pr-3 font-medium">Data</th>
+            <th className="py-2 pr-3 font-medium">Lado</th>
+            <th className="py-2 pr-3 text-right font-medium">Preço</th>
+            <th className="py-2 pr-3 text-right font-medium">Quantidade</th>
+            <th className="py-2 pr-3 text-right font-medium">Total ({quote})</th>
+            <th className="py-2 pr-3 text-right font-medium">Taxa</th>
+            <th className="py-2 pr-3 font-medium">Motivo</th>
+            <th className="py-2 font-medium">ID Binance</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {orders.map((o) => (
+            <tr key={o.id}>
+              <td className="py-2 pr-3 whitespace-nowrap text-ink-2">{dateTime(o.created_at)}</td>
+              <td className="py-2 pr-3">
+                <span className="inline-flex items-center gap-1">
+                  {o.side === "BUY" ? <ArrowUpRight className="size-3.5 text-accent" /> : <ArrowDownRight className="size-3.5 text-ink-2" />}
+                  {o.side === "BUY" ? "Compra" : "Venda"}
+                </span>
+              </td>
+              <td className="py-2 pr-3 text-right">{price(o.price)}</td>
+              <td className="py-2 pr-3 text-right">{qty(o.qty)}</td>
+              <td className="py-2 pr-3 text-right">{num(o.quote_qty)}</td>
+              <td className="py-2 pr-3 text-right text-ink-2">{num(o.fee_quote, 4)}</td>
+              <td className="py-2 pr-3 text-ink-2">{REASONS[o.reason] ?? o.reason}</td>
+              <td className="py-2 text-xs text-muted">{o.mode === "paper" ? "simulada" : o.exchange_order_id}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function OpenPositionCard({ position, quote, base }: { position: Position; quote: string; base: string }) {
+  const kind = position.stop_kind === "trailing_stop" ? "Trailing stop" : position.stop_kind === "breakeven" ? "Break-even" : "Stop loss";
+  return (
+    <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+      <Item label="Resultado agora" value={<><Pnl value={position.unrealized_pnl} quote={quote} /> <span className="text-xs text-muted">({pct(position.unrealized_pct, true)})</span></>} />
+      <Item label="Preço de entrada" value={price(position.entry_price)} />
+      <Item label="Preço atual" value={price(position.current_price)} />
+      <Item label="Quantidade" value={`${qty(position.qty)} ${base}`} />
+      <Item label="Investido" value={`${num(position.cost_quote)} ${quote}`} />
+      <Item label={kind} value={position.stop_price ? price(position.stop_price) : "sem stop"} />
+      <Item label="Máxima desde a compra" value={price(position.highest_price)} />
+      <Item label="Aberta há" value={duration(position.duration_seconds)} />
+      <Item label="Já vendido (parciais)" value={`${num(position.proceeds_quote)} ${quote}`} />
+    </div>
+  );
+}
+
+function Item({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs text-ink-2">{label}</div>
+      <div className="mt-0.5 font-medium text-ink tabular">{value}</div>
+    </div>
+  );
+}

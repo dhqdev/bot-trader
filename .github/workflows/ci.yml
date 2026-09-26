@@ -1,0 +1,94 @@
+name: CI e imagem Docker
+
+# A cada push na main: roda os testes e publica a imagem em
+#   ghcr.io/<dono>/<repositório>:latest   (e :sha-xxxxxxx)
+# Tags "v1.2.3" publicam também :1.2.3 e :1.2.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  test:
+    name: Testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Backend (pytest)
+        working-directory: backend
+        run: |
+          pip install -r requirements-dev.txt
+          python -m pytest -q
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend (tipos + build)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  docker:
+    name: Imagem Docker
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Opcional: cadastre o secret PORTAINER_WEBHOOK_URL (webhook da stack/serviço no
+      # Portainer) para o servidor puxar a imagem nova automaticamente após o build.
+      - name: Atualizar no Portainer
+        if: env.PORTAINER_WEBHOOK_URL != '' && github.ref == 'refs/heads/main'
+        run: curl -fsS -X POST "$PORTAINER_WEBHOOK_URL"

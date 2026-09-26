@@ -1,0 +1,33 @@
+# Produção:
+#   1. cp .env.production.example .env.production  e preencha
+#   2. docker compose up -d --build                           (HTTP na porta 8000)
+#      docker compose --profile https up -d --build           (HTTPS automático com Caddy, precisa de domínio)
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env.production
+    volumes:
+      - bot-data:/app/backend/data # banco SQLite e segredo
+    ports:
+      - "${APP_PORT:-8000}:8000"
+
+  caddy:
+    image: caddy:2
+    profiles: ["https"]
+    restart: unless-stopped
+    depends_on: [app]
+    env_file: .env.production
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  bot-data:
+  caddy-data:
+  caddy-config:

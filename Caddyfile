@@ -1,0 +1,9 @@
+# HTTPS automático (Let's Encrypt). Defina DOMAIN no .env.production
+# e aponte o DNS do domínio para o IP do servidor.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy app:8000 {
+		# envia o streaming das respostas da IA sem buffer
+		flush_interval -1
+	}
+}

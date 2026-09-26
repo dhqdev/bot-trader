@@ -1,0 +1,38 @@
+# Stack do Bot Trader para o Portainer (Stacks -> Add stack -> Web editor).
+#
+# Antes de publicar:
+#   1. Registries -> Add registry -> Custom registry
+#        URL: ghcr.io | usuário: seu usuário do GitHub | senha: token (classic) com escopo read:packages
+#   2. Em "Environment variables" da stack, defina pelo menos BT_SECRET_KEY
+#      (gere com: python -c "import secrets; print(secrets.token_urlsafe(48))" e GUARDE o valor).
+#
+# Atualizar: na stack, "Pull and redeploy" (ou o webhook, ver README).
+# Mantenha UMA réplica: o motor dos bots roda dentro da API; duas cópias duplicariam as ordens.
+
+services:
+  bot-trader:
+    image: ghcr.io/dhqdev/bot-trader:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      BT_ENV: production
+      BT_SECRET_KEY: ${BT_SECRET_KEY}
+      # true somente se o acesso for por HTTPS (proxy reverso com TLS na frente).
+      # Acessando por http://IP:porta, deixe false ou o login não funciona.
+      BT_COOKIE_SECURE: ${BT_COOKIE_SECURE:-false}
+      BT_ALLOW_REGISTRATION: ${BT_ALLOW_REGISTRATION:-false}
+      BT_ENGINE_POLL_SECONDS: ${BT_ENGINE_POLL_SECONDS:-15}
+      BT_AI_MODEL: ${BT_AI_MODEL:-claude-opus-5}
+      BT_ANTHROPIC_API_KEY: ${BT_ANTHROPIC_API_KEY:-}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - bot-trader-data:/app/backend/data # banco SQLite; faça backup deste volume
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bot-trader-data:
