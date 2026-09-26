@@ -1,0 +1,60 @@
+version: "3.7"
+
+# Bot Trader em Docker Swarm + Traefik (Portainer -> Stacks -> Add stack -> Web editor).
+# Antes do deploy:
+#   1. DNS: trade.tekvosoft.com apontando para o IP do servidor.
+#   2. Portainer -> Registries: ghcr.io com usuário do GitHub + token (read:packages).
+#   3. Troque BT_SECRET_KEY abaixo (gere no servidor com: openssl rand -base64 48) e guarde o valor.
+
+services:
+  bot_trader:
+    image: ghcr.io/dhqdev/bot-trader:latest
+    environment:
+      # --- Segurança (TROCAR OBRIGATORIAMENTE) ---
+      # Criptografa as chaves da Binance/Anthropic salvas no sistema e assina o login.
+      # Se mudar depois, as chaves precisam ser cadastradas de novo.
+      - BT_SECRET_KEY=TROQUE_POR_UMA_CHAVE_ALEATORIA_COM_48_CARACTERES
+
+      # --- Configurações do Bot Trader ---
+      - BT_ENV=production
+      - BT_COOKIE_SECURE=true          # acesso por HTTPS (Traefik)
+      - BT_ALLOW_REGISTRATION=false    # só o primeiro cadastro (o seu) é permitido
+      - BT_ENGINE_POLL_SECONDS=15      # frequência de checagem de stop e alvos
+
+      # --- IA (opcional; a chave também pode ser cadastrada pela tela) ---
+      - BT_AI_MODEL=claude-opus-5
+      # - BT_ANTHROPIC_API_KEY=sk-ant-...
+    volumes:
+      - bot_trader_data:/app/backend/data   # banco de dados: faça backup deste volume
+    networks:
+      - network_public
+    stop_grace_period: 30s
+    deploy:
+      mode: replicated
+      replicas: 1                # NUNCA aumente: duas cópias duplicariam as ordens
+      update_config:
+        order: stop-first        # derruba o antigo antes de subir o novo (nunca dois motores juntos)
+      restart_policy:
+        condition: any
+        delay: 10s
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        # --- Configuração do Traefik ---
+        - "traefik.enable=true"
+        - "traefik.docker.network=network_public"
+        - "traefik.http.routers.bottrader.rule=Host(`trade.tekvosoft.com`)"
+        - "traefik.http.routers.bottrader.entrypoints=websecure"
+        - "traefik.http.routers.bottrader.service=bottrader-service"
+        - "traefik.http.routers.bottrader.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.bottrader-service.loadbalancer.server.port=8000"
+
+volumes:
+  bot_trader_data:
+    name: bot_trader_data
+
+networks:
+  network_public:
+    external: true
+    name: network_public

@@ -105,7 +105,11 @@ ghcr.io/dhqdev/bot-trader:sha-abc1234 # versão exata de um commit (para voltar 
 
 Uma tag `v1.2.3` publica também `:1.2.3` e `:1.2`.
 
-### Portainer
+### Portainer com Swarm + Traefik (trade.tekvosoft.com)
+
+Use [`deploy/portainer-swarm-traefik.yml`](deploy/portainer-swarm-traefik.yml). Ele segue o mesmo padrão das outras stacks do servidor (`network_public`, `websecure`, `letsencryptresolver`) e não publica porta: o Traefik faz o HTTPS. Troque o `BT_SECRET_KEY` antes do deploy. Os passos de registro no GHCR são os mesmos do item 1 abaixo.
+
+### Portainer (sem Traefik)
 
 1. **Registries → Add registry → Custom registry.** URL `ghcr.io`, com o seu usuário do GitHub e um token (classic) com escopo `read:packages`. A imagem é privada porque o repositório é privado.
 2. **Stacks → Add stack → Web editor.** Cole o conteúdo de [`deploy/portainer-stack.yml`](deploy/portainer-stack.yml).
@@ -150,7 +154,8 @@ backend/
   tests/             66 testes: indicadores, ausência de look-ahead, risco, backtest, motor, API, IA
 frontend/            React + Vite + TypeScript + Tailwind (lightweight-charts e Recharts)
 legacy/              código antigo, preservado para consulta (pode apagar)
-deploy/portainer-stack.yml   stack para o Portainer (usa a imagem do GHCR)
+deploy/portainer-swarm-traefik.yml   stack Swarm + Traefik (trade.tekvosoft.com)
+deploy/portainer-stack.yml   stack para o Portainer sem Traefik (usa a imagem do GHCR)
 .github/workflows/ci.yml    testes + build e publicação da imagem
 Dockerfile, docker-compose.yml, Caddyfile, start.ps1
 ```
