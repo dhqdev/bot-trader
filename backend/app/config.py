@@ -46,6 +46,11 @@ class Settings(BaseSettings):
 def _resolve_secret(settings: Settings) -> str:
     secret = settings.secret_key.strip()
     if secret and secret != DEFAULT_SECRET:
+        if settings.is_production and any(word in secret.upper() for word in ("TROQUE", "CHANGE", "EXEMPLO", "EXAMPLE")):
+            raise RuntimeError(
+                "BT_SECRET_KEY ainda é o valor de exemplo da stack. Gere uma chave com "
+                "'openssl rand -base64 48', coloque na stack e faça o deploy de novo."
+            )
         if settings.is_production and len(secret) < 32:
             raise RuntimeError("BT_SECRET_KEY muito curta: use pelo menos 32 caracteres aleatórios.")
         return secret
