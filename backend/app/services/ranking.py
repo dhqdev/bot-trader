@@ -28,7 +28,7 @@ from app.core.strategies import STRATEGIES
 from app.db import session_scope
 from app.models import NewsItem, utcnow
 from app.services import backtesting
-from app.services.llm import AIConfig, structured
+from app.services.llm import AIConfig, error_message, structured
 
 log = logging.getLogger("bot_trader.ranking")
 
@@ -341,7 +341,7 @@ def advise(result: dict, amount: float, ai: AIConfig | None, client=None) -> dic
         out, model = structured(ai, ADVICE_SYSTEM, context, ADVICE_SCHEMA, "recomendacao_robo", 4000, client=client)
     except Exception as exc:
         log.warning("IA indisponível para a recomendação: %s", exc)
-        return {**rule_advice(result), "note": "A IA não respondeu agora; recomendação pelas regras do ranking."}
+        return {**rule_advice(result), "note": f"{error_message(exc, ai).rstrip('.')}. Por enquanto, a recomendação segue as regras do ranking."}
     keys = {r["key"] for r in result["robots"]}
     if out.get("recommended_key") not in keys:
         out["recommended_key"] = result["best"]

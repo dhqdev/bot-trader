@@ -123,6 +123,13 @@ def test_advice_rules_and_ai():
     out = ranking.advise(result, 100, ai, client=SimpleNamespace(messages=SimpleNamespace(create=invented)))
     assert out["recommended_key"] == result["best"]  # a IA não inventa robô
 
+    def broken(**kwargs):
+        raise RuntimeError("sem créditos")
+
+    out = ranking.advise(result, 100, ai, client=SimpleNamespace(messages=SimpleNamespace(create=broken)))
+    assert out["source"] == "rules" and out["recommended_key"] == result["best"]
+    assert "sem créditos" in out["note"] and "regras do ranking" in out["note"]  # diz por que a IA não respondeu
+
 
 @pytest.fixture(scope="module")
 def api(fresh_db):
