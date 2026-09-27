@@ -19,8 +19,10 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.core import indicators as ta
+from app.core import newsguard
 from app.core.exchange import BinanceTrader, MarketData, PaperTrader, SymbolRules, get_market, interval_ms, now_ms
 from app.core.risk import PositionState, RiskConfig, open_position, position_size_quote, update
+from app.core.sentiment import live_check as sentiment_check
 from app.core.strategies import REMOVED, get_strategy
 from app.db import session_scope
 from app.models import Bot, BotEvent, Credential, Order, Position, SystemState, utcnow
@@ -127,6 +129,8 @@ class BotService:
         pos = self.open_position()
         if pos is not None:
             self.manage_risk(pos, self.market.price(self.bot.symbol))
+            if pos.status == "open":
+                self.check_news_exit(pos)
 
         step_ms = interval_ms(self.bot.interval)
         last_closed_open = (now_ms() // step_ms) * step_ms - step_ms
@@ -152,10 +156,13 @@ class BotService:
         atr_value = float(atr_series.iloc[-1]) if atr_series.notna().iloc[-1] else None
 
         pos = self.open_position()
+        market_ok, market_reason, snap["market"] = self.market_filters()
         met = sum(c["ok"] for c in snap["entry_checks"])
         total = len(snap["entry_checks"])
         if pos is None and snap["entry"]:
             allowed, reason = self.can_enter()
+            if allowed and not market_ok:
+                allowed, reason = False, market_reason
             if allowed:
                 self.buy(atr_value, "signal")
             else:
@@ -167,6 +174,35 @@ class BotService:
         else:
             state = "posicionado" if pos else f"entrada {met}/{total} condições"
             self.event("signal", f"Candle fechado em {_fmt(close)}: sem ação ({state})", snap)
+
+    def market_filters(self) -> tuple[bool, str, dict]:
+        """Sentimento do mercado e notícias: (pode comprar?, motivo do bloqueio, leitura para a tela)."""
+        info: dict = {"sentiment_filter": self.risk.sentiment_filter, "news_guard": self.risk.news_guard}
+        ok, reason = True, ""
+        try:
+            allowed, why, fng = sentiment_check(self.risk.sentiment_filter, self.risk.fear_threshold)
+            info["sentiment"] = fng
+            if not allowed:
+                ok, reason = False, why
+        except Exception as exc:  # sem o índice, o filtro não bloqueia
+            log.warning("Índice de medo e ganância indisponível: %s", exc)
+        item = newsguard.entry_block(self.db, self.bot.base_asset, self.risk.news_guard, self.risk.news_window_hours)
+        if item is not None:
+            info["news_block"] = {"title": item.title, "source": item.source, "url": item.url, "published_at": item.published_at.isoformat(), "sentiment": item.sentiment}
+            if ok:
+                ok, reason = False, f"notícia negativa de alto impacto: {newsguard.describe(item)}"
+        info["blocks_entry"] = not ok
+        info["reason"] = reason
+        return ok, reason, info
+
+    def check_news_exit(self, pos: Position) -> None:
+        if self.risk.news_guard != "block_and_exit" or pos.entry_time is None:
+            return
+        item = newsguard.exit_trigger(self.db, self.bot.base_asset, self.risk.news_guard, self.risk.news_window_hours, pos.entry_time)
+        if item is None:
+            return
+        self.event("warn", f"Notícia muito negativa confirmada pela IA: {newsguard.describe(item)}. Vendendo a posição.", {"url": item.url})
+        self.sell(pos, 1.0, "news")
 
     def can_enter(self) -> tuple[bool, str]:
         last = self.db.scalar(
@@ -352,6 +388,7 @@ REASON_LABELS = {
     "trailing_stop": "trailing stop",
     "take_profit": "alvo parcial",
     "manual": "manual",
+    "news": "notícia negativa",
 }
 
 

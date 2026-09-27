@@ -7,6 +7,7 @@ _tmp = Path(tempfile.mkdtemp(prefix="bt-tests-"))
 os.environ["BT_DATABASE_URL"] = f"sqlite:///{(_tmp / 'test.db').as_posix()}"
 os.environ["BT_SECRET_KEY"] = "test-secret-key-for-unit-tests-only"
 os.environ["BT_ENGINE_AUTOSTART"] = "false"
+os.environ["BT_SCHEDULER_ENABLED"] = "false"
 os.environ["BT_ANTHROPIC_API_KEY"] = ""
 
 import numpy as np  # noqa: E402
@@ -89,4 +90,14 @@ def fresh_db():
 
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_limits():
+    """Os limites de tentativas são globais: cada teste começa do zero."""
+    from app.security import account_limiter, login_limiter, twofa_limiter
+
+    for limiter in (login_limiter, account_limiter, twofa_limiter):
+        limiter.clear()
     yield

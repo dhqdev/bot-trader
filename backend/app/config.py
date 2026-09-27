@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BACKEND_DIR / "data"
 DEFAULT_SECRET = "change-me"
+DEV_CORS = "http://localhost:5173,http://127.0.0.1:5173"
 
 
 class Settings(BaseSettings):
@@ -24,7 +25,7 @@ class Settings(BaseSettings):
     database_url: str = ""
     access_token_hours: int = 24 * 7
     allow_registration: bool = False  # o primeiro usuário sempre pode se registrar
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = DEV_CORS
     cookie_secure: bool = False  # True em produção atrás de HTTPS
     frontend_dist: Path = BACKEND_DIR.parent / "frontend" / "dist"
 
@@ -32,7 +33,12 @@ class Settings(BaseSettings):
     engine_poll_seconds: int = 15  # frequência de checagem de stops/preço
 
     anthropic_api_key: str = ""  # opcional, também pode ser salva pela interface
-    ai_model: str = "claude-opus-5"
+    ai_model: str = "claude-opus-5"  # análises, conversa e piloto automático
+    ai_fast_model: str = "claude-haiku-4-5"  # classificação das notícias (muitas chamadas pequenas)
+
+    # tarefas em segundo plano: notícias, índice de medo e ganância, piloto automático
+    scheduler_enabled: bool = True
+    news_enabled: bool = True
 
     @property
     def is_production(self) -> bool:
@@ -40,6 +46,8 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
+        if self.is_production and self.cors_origins == DEV_CORS:
+            return []  # em produção o frontend é servido pelo próprio backend
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 

@@ -171,3 +171,133 @@ class AIReport(Base):
     content: Mapped[str] = mapped_column(Text)
     model: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Tabelas da v2.2. São todas novas (create_all cria sozinho), para não precisar
+# alterar colunas de tabelas que já existem nos bancos em produção.
+
+
+class UserSecurity(Base):
+    """Segurança da conta: verificação em duas etapas (2FA) e versão das sessões."""
+
+    __tablename__ = "user_security"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    totp_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    totp_last_step: Mapped[int] = mapped_column(BigInteger, default=0)  # impede reusar o mesmo código
+    recovery_codes: Mapped[list] = mapped_column(JSON, default=list)  # só os hashes
+    token_version: Mapped[int] = mapped_column(Integer, default=0)  # +1 derruba todas as sessões
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow, onupdate=utcnow)
+
+
+class SecurityEvent(Base):
+    """Registro de atividade da conta (login, troca de senha, chaves, 2FA...)."""
+
+    __tablename__ = "security_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(40))
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    user_agent: Mapped[str] = mapped_column(String(200), default="")
+    detail: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow, index=True)
+
+
+class NewsItem(Base):
+    __tablename__ = "news_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    url: Mapped[str] = mapped_column(String(1000), unique=True)
+    source: Mapped[str] = mapped_column(String(64))
+    lang: Mapped[str] = mapped_column(String(8), default="en")
+    title: Mapped[str] = mapped_column(String(500))
+    summary: Mapped[str] = mapped_column(Text, default="")
+    published_at: Mapped[datetime] = mapped_column(TZDateTime(), index=True)
+    fetched_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow)
+    assets: Mapped[list] = mapped_column(JSON, default=list)  # ex.: ["BTC", "ETH"] ou ["MARKET"]
+    sentiment: Mapped[float] = mapped_column(Float, default=0.0)  # -1 (muito negativa) a +1
+    impact: Mapped[str] = mapped_column(String(8), default="low")  # low | medium | high
+    category: Mapped[str] = mapped_column(String(24), default="other")
+    classified_by: Mapped[str] = mapped_column(String(12), default="keywords")  # keywords | ai
+    ai_summary: Mapped[str] = mapped_column(Text, default="")
+
+
+class FearGreed(Base):
+    """Índice de Medo e Ganância do mercado cripto (alternative.me), um valor por dia."""
+
+    __tablename__ = "fear_greed"
+
+    day: Mapped[int] = mapped_column(BigInteger, primary_key=True)  # ms, 00:00 UTC
+    value: Mapped[int] = mapped_column(Integer)
+    label: Mapped[str] = mapped_column(String(32), default="")
+
+
+class AutopilotConfig(Base):
+    """Piloto automático de um bot: analisa, testa e (se autorizado) aplica melhorias."""
+
+    __tablename__ = "autopilot"
+
+    bot_id: Mapped[int] = mapped_column(ForeignKey("bots.id", ondelete="CASCADE"), primary_key=True)
+    mode: Mapped[str] = mapped_column(String(16), default="off")  # off | suggest | auto_paper | auto_all
+    interval_hours: Mapped[int] = mapped_column(Integer, default=168)
+    allow_strategy_change: Mapped[bool] = mapped_column(Boolean, default=True)
+    live_authorized_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow, onupdate=utcnow)
+
+
+class OptimizationRun(Base):
+    """Um ciclo do piloto automático: diagnóstico, candidatas testadas e decisão."""
+
+    __tablename__ = "optimization_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    bot_id: Mapped[int] = mapped_column(ForeignKey("bots.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    trigger: Mapped[str] = mapped_column(String(16), default="manual")  # manual | schedule
+    # running | suggested | applied | rejected | reverted | no_change | failed | superseded
+    status: Mapped[str] = mapped_column(String(16), default="running", index=True)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    diagnostics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    baseline: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    candidate: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    tested: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    previous_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ai_notes: Mapped[str] = mapped_column(Text, default="")
+    ai_model: Mapped[str] = mapped_column(String(64), default="")
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+    reverted_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+
+
+class AIInsight(Base):
+    """Base de conhecimento que a IA acumula e reutiliza nos próximos ciclos."""
+
+    __tablename__ = "ai_insights"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    bot_id: Mapped[int | None] = mapped_column(ForeignKey("bots.id", ondelete="SET NULL"), nullable=True)
+    symbol: Mapped[str] = mapped_column(String(32), default="")
+    interval: Mapped[str] = mapped_column(String(8), default="")
+    kind: Mapped[str] = mapped_column(String(16), default="lesson")  # lesson | warning | observation
+    text: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(16), default="ai")  # ai | optimizer
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow)
+
+
+class KVSetting(Base):
+    """Estado global pequeno (ex.: última coleta de notícias)."""
+
+    __tablename__ = "kv_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict | list | str | int | float | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow, onupdate=utcnow)

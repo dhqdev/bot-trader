@@ -1,15 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Play, RotateCcw, Sparkles, Square, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { ChecksList, EventsList, ModeBadge, OpenPositionCard, OrdersTable, PositionsTable, StatusBadge } from "../components/bot";
 import { CandleChart } from "../components/charts";
 import { TierBadge } from "../components/profiles";
 import { useStrategies } from "../components/forms";
 import { Button, Card, Confirm, ErrorBox, Loading, PageHeader, Pnl, Stat, Tabs } from "../components/ui";
 import { api } from "../lib/api";
-import { duration, INTERVAL_LABELS, money, num, pct, timeAgo } from "../lib/format";
-import type { Bot, BotChart, BotEvent, OrderRow, Position } from "../lib/types";
+import { dateTime, duration, INTERVAL_LABELS, money, NEWS_GUARD_LABELS, num, pct, SENTIMENT_FILTER_LABELS, timeAgo } from "../lib/format";
+import type { Bot, BotAutopilot, BotChart, BotEvent, OrderRow, Position } from "../lib/types";
+import { Findings, RunStatusBadge, SuggestionBox } from "./Autopilot";
 
 type Tab = "trades" | "orders" | "events";
 type Action = "start" | "stop" | "close" | "delete" | "reset" | null;
@@ -21,6 +22,8 @@ function ConfigSummary({ bot }: { bot: Bot }) {
   const sizing =
     r.sizing_mode === "fixed_quote" ? `${num(r.order_size_quote)} ${bot.quote_asset} por compra` : r.sizing_mode === "percent_balance" ? `${r.balance_percent}% do saldo` : `${r.risk_percent}% de risco até o stop`;
   const stop = r.stop_loss_mode === "atr" ? `${num(r.stop_loss_atr_mult)}× ATR` : r.stop_loss_mode === "percent" ? `${num(r.stop_loss_pct)}%` : "sem stop";
+  const usesFear = r.sentiment_filter === "avoid_extreme_fear" || r.sentiment_filter === "both";
+  const sentimentText = `${SENTIMENT_FILTER_LABELS[r.sentiment_filter] ?? r.sentiment_filter}${usesFear ? ` (≤ ${r.fear_threshold})` : ""}`;
   return (
     <dl className="text-sm">
       <Row k="Estratégia" v={bot.strategy_name} />
@@ -31,10 +34,60 @@ function ConfigSummary({ bot }: { bot: Bot }) {
       <Row k="Alvos" v={r.take_profits.length ? r.take_profits.map((t) => `+${num(t.pct)}% (vende ${num(t.size_pct)}%)`).join(", ") : "nenhum (sai pelo sinal)"} />
       <Row k="Break-even" v={r.breakeven_at_pct ? `após +${num(r.breakeven_at_pct)}%` : "desligado"} />
       <Row k="Perda diária máx." v={r.max_daily_loss_quote ? `${num(r.max_daily_loss_quote)} ${bot.quote_asset}` : "sem limite"} />
+      <Row k="Sentimento" v={sentimentText} />
+      <Row k="Notícias" v={r.news_guard === "off" ? "desligada" : `${NEWS_GUARD_LABELS[r.news_guard]} (${r.news_window_hours} h)`} />
       {info?.params.map((p) => (
         <Row key={p.name} k={p.label} v={String(typeof bot.strategy_params[p.name] === "boolean" ? (bot.strategy_params[p.name] ? "sim" : "não") : bot.strategy_params[p.name] ?? p.default)} />
       ))}
     </dl>
+  );
+}
+
+function AutopilotMini({ botId }: { botId: number }) {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { data } = useQuery({
+    queryKey: ["bot", String(botId), "autopilot"],
+    queryFn: () => api.get<BotAutopilot>(`/autopilot/bots/${botId}`),
+    refetchInterval: (q) => (q.state.data?.running ? 4000 : 30_000),
+  });
+  const run = useMutation({
+    mutationFn: () => api.post(`/autopilot/bots/${botId}/run`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bot", String(botId), "autopilot"] }),
+  });
+  if (!data) return null;
+  const last = data.last_run;
+  const next = data.autopilot.mode !== "off" && data.autopilot.next_run_at ? ` · próximo ciclo: ${dateTime(data.autopilot.next_run_at)}` : "";
+  return (
+    <Card title="Piloto automático" action={<Link to="/ai/piloto" className="text-xs text-accent hover:underline">abrir</Link>}>
+      <div className="space-y-3 text-sm">
+        <p className="text-xs text-ink-2">
+          Modo: <span className="text-ink">{data.autopilot.mode_label}</span>
+          {next}
+        </p>
+        {data.suggestion && <SuggestionBox run={data.suggestion} onDetails={() => navigate("/ai/piloto")} />}
+        {last && last.id !== data.suggestion?.id && (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs">
+              <RunStatusBadge status={last.status} />
+              <span className="text-muted">{timeAgo(last.created_at)}</span>
+            </div>
+            {last.summary && <p className="line-clamp-3 text-xs text-ink-2">{last.summary}</p>}
+          </div>
+        )}
+        {last && last.status !== "running" && last.findings.length > 0 && (
+          <div className="border-t border-line pt-3">
+            <div className="mb-1.5 text-xs font-medium text-ink-2">Diagnóstico</div>
+            <Findings findings={last.findings} />
+          </div>
+        )}
+        <Button size="sm" onClick={() => run.mutate()} loading={run.isPending} disabled={data.running}>
+          <Play className="size-3.5" />
+          {data.running ? "Analisando…" : "Otimizar agora"}
+        </Button>
+        <ErrorBox error={run.error} />
+      </div>
+    </Card>
   );
 }
 
@@ -153,7 +206,7 @@ export function BotDetailPage() {
           )}
         </Card>
         <Card title="Condições da estratégia" action={<span className="text-xs text-muted">último candle fechado</span>}>
-          <ChecksList snapshot={chart.data?.preview ?? b.last_signal} quote={q} />
+          <ChecksList snapshot={chart.data?.preview ?? b.last_signal} quote={q} market={b.last_signal?.market} />
         </Card>
       </div>
 
@@ -182,9 +235,12 @@ export function BotDetailPage() {
             {tab === "events" && <EventsList events={events.data ?? []} />}
           </div>
         </Card>
-        <Card title="Configuração">
-          <ConfigSummary bot={b} />
-        </Card>
+        <div className="space-y-4">
+          <AutopilotMini botId={b.id} />
+          <Card title="Configuração">
+            <ConfigSummary bot={b} />
+          </Card>
+        </div>
       </div>
 
       {action && (

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { useLocation, useNavigate } from "react-router";
 import remarkGfm from "remark-gfm";
+import { AITabs } from "../components/aitabs";
 import { Badge, Button, Card, Empty, Modal, PageHeader, Switch } from "../components/ui";
 import { api, streamChat } from "../lib/api";
 import { dateTime } from "../lib/format";
@@ -32,12 +33,12 @@ interface NavState {
 
 const SUGGESTIONS = [
   "Como estão meus bots? O que está funcionando e o que não está?",
+  "Quais notícias recentes podem afetar meus bots? E como está o sentimento do mercado?",
+  "O que o piloto automático encontrou nos meus bots? Concorda com as mudanças?",
   "Qual estratégia funciona melhor para SOLUSDT no 4h? Compare todas.",
-  "Analise o momento atual do BTC e diga se é um bom mercado para as minhas estratégias.",
-  "Minha configuração de risco está adequada? Sugira ajustes com base em backtests.",
 ];
 
-function MarkdownView({ text }: { text: string }) {
+export function MarkdownView({ text }: { text: string }) {
   return (
     <div className="prose-bt text-sm">
       <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
@@ -150,9 +151,11 @@ export function AIPage() {
     return (
       <>
         <PageHeader title="Análise com IA" />
+        <AITabs />
         <Card>
           <Empty icon={<Sparkles className="size-8" />} title="Configure a IA">
-            Cadastre sua chave da API da Anthropic (Claude) em Configurações. A IA analisa seus bots, o mercado e roda backtests para embasar as sugestões.
+            Cadastre sua chave da API da Anthropic (Claude) em Configurações. A IA analisa seus bots, o mercado e as notícias, roda backtests para embasar as sugestões e
+            ajuda o piloto automático a melhorar as estratégias. O piloto e as notícias também funcionam sem a chave, só que sem as análises escritas.
             <div className="mt-4">
               <Button variant="primary" onClick={() => navigate("/settings")}>Ir para Configurações</Button>
             </div>
@@ -164,7 +167,8 @@ export function AIPage() {
 
   return (
     <>
-      <PageHeader title="Análise com IA" subtitle={`Pergunte sobre seus bots, estratégias e o mercado. A IA consulta dados reais e roda backtests, mas não envia ordens.${status.data ? ` · ${status.data.model}` : ""}`} />
+      <PageHeader title="Análise com IA" subtitle={`Pergunte sobre seus bots, estratégias, notícias e o mercado. A IA consulta dados reais e roda backtests, mas não envia ordens.${status.data ? ` · ${status.data.model}` : ""}`} />
+      <AITabs />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
         <Card padded={false} className="flex min-h-[70vh] flex-col">
           <div className="flex-1 space-y-5 overflow-y-auto p-4">

@@ -8,7 +8,7 @@ import { defaultParams, HELP, INTERVALS, ParamsForm, RiskForm, StrategyPicker, u
 import { ProfilePicker } from "../components/profiles";
 import { Button, Card, Empty, ErrorBox, Field, InfoTip, Input, Loading, PageHeader, Pnl, Select, Stat } from "../components/ui";
 import { api } from "../lib/api";
-import { dateTime, duration, INTERVAL_LABELS, INTERVAL_MINUTES_MAP, num, pct, price, REASONS } from "../lib/format";
+import { dateTime, duration, INTERVAL_LABELS, INTERVAL_MINUTES_MAP, num, pct, price, REASONS, SENTIMENT_FILTER_LABELS } from "../lib/format";
 import type { BacktestMetrics, BacktestResult, ChartMarker, CompareRow, Profile, RiskConfig } from "../lib/types";
 import { mergeProfileRisk, type BotDraft } from "./BotForm";
 
@@ -58,6 +58,15 @@ function interpret(m: BacktestMetrics, interval: string): Verdict[] {
 
   if ((INTERVAL_MINUTES_MAP[interval] ?? 60) <= 60) {
     out.push({ tone: "warn", text: <>Candle de {INTERVAL_LABELS[interval]}: nos nossos testes, 1 hora ou menos perdeu em quase todas as estratégias. Compare com 4 horas.</> });
+  }
+  if (m.sentiment_filter === "sem dados") {
+    out.push({ tone: "warn", text: <>O filtro de sentimento está ligado, mas o índice de medo e ganância ainda não foi baixado pelo servidor: este teste rodou sem ele.</> });
+  } else if (m.sentiment_filter && m.sentiment_filter !== "off") {
+    const n = m.entries_blocked_by_sentiment ?? 0;
+    out.push({
+      tone: "info",
+      text: <>Filtro de sentimento ({SENTIMENT_FILTER_LABELS[m.sentiment_filter]}): {n ? <>evitou <strong>{n}</strong> sinal(is) de compra no período.</> : "não bloqueou nenhuma compra neste período."}</>,
+    });
   }
   out.push({ tone: "info", text: <>Próximo passo: rode o mesmo teste em outro período e em outros pares. Se continuar bom, crie o bot em modo <strong>simulado</strong> antes do real.</> });
   return out;

@@ -1,8 +1,8 @@
 // Service worker do Bot Trader.
 // - Interface (HTML, JS, CSS, ícones) em cache: abre rápido e funciona sem conexão.
 // - Dados (/api/*) NUNCA passam pelo cache: saldo, posições e ordens vêm sempre ao vivo.
-const CACHE = "bt-shell-v1";
-const SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icons/icon-192.png", "/icons/icon-512.png"];
+const CACHE = "bt-shell-v2";
+const SHELL = ["/", "/theme.js", "/manifest.webmanifest", "/favicon.svg", "/icons/icon-192.png", "/icons/icon-512.png"];
 const MAX_ASSETS = 60;
 
 self.addEventListener("install", (event) => {
@@ -51,7 +51,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // arquivos com hash no nome nunca mudam: cache primeiro
-  if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icons/")) {
+  if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icons/") || url.pathname === "/theme.js") {
     event.respondWith(
       caches.match(req).then(
         (hit) =>

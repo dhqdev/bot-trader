@@ -22,8 +22,13 @@ services:
       - BT_ENGINE_POLL_SECONDS=15      # frequência de checagem de stop e alvos
 
       # --- IA (opcional; a chave também pode ser cadastrada pela tela) ---
-      - BT_AI_MODEL=claude-opus-5
+      - BT_AI_MODEL=claude-opus-5            # conversa, análises e piloto automático
+      - BT_AI_FAST_MODEL=claude-haiku-4-5    # classificação das notícias (muitas chamadas pequenas)
       # - BT_ANTHROPIC_API_KEY=sk-ant-...
+
+      # --- Tarefas em segundo plano: notícias, medo e ganância, piloto automático ---
+      - BT_SCHEDULER_ENABLED=true
+      - BT_NEWS_ENABLED=true
     volumes:
       - bot_trader_data:/app/backend/data   # banco de dados: faça backup deste volume
     networks:

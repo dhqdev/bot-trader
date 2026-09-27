@@ -18,6 +18,7 @@ import pandas as pd
 from app.core import indicators as ta
 from app.core.exchange import INTERVAL_MINUTES
 from app.core.risk import RiskConfig, open_position, position_size_quote, update
+from app.core.sentiment import entry_mask
 from app.core.strategies import get_strategy
 
 MIN_ORDER_QUOTE = 5.0  # a Binance recusa ordens abaixo de ~5 USDT
@@ -36,7 +37,11 @@ def run_backtest(
     initial_capital: float = 1000.0,
     slippage_pct: float = 0.05,
     max_curve_points: int = 600,
+    sentiment: tuple[np.ndarray, np.ndarray] | None = None,
+    start_index: int | None = None,
 ) -> dict:
+    """`sentiment`: índice de medo e ganância alinhado aos candles (core/sentiment.py).
+    `start_index`: primeiro candle negociado (os anteriores só aquecem os indicadores)."""
     strategy = get_strategy(strategy_key)
     resolved = strategy.resolve_params(params)
     if len(df) < 50:
@@ -49,7 +54,14 @@ def run_backtest(
     entry, exit_ = out.entry.to_numpy(), out.exit.to_numpy()
 
     n = len(df)
-    start = min(max(strategy.warmup(resolved) // 2, 30), n - 2)
+    allowed = np.ones(n, dtype=bool)
+    if sentiment is not None and risk.sentiment_filter != "off":
+        allowed = entry_mask(risk.sentiment_filter, sentiment[0], sentiment[1], risk.fear_threshold)
+    blocked_by_sentiment = 0
+    if start_index is not None:
+        start = min(max(start_index, 1), n - 2)
+    else:
+        start = min(max(strategy.warmup(resolved) // 2, 30), n - 2)
     fee = risk.fee_pct / 100
     slip = slippage_pct / 100
 
@@ -137,7 +149,10 @@ def run_backtest(
         # 3) sinais no fechamento
         blocked_today = risk.max_daily_loss_quote > 0 and daily_pnl.get(_day(int(times[i])), 0.0) <= -risk.max_daily_loss_quote
         if state is None and entry[i] and i >= cooldown_until and not blocked_today and i < n - 1:
-            pending = "buy"
+            if allowed[i]:
+                pending = "buy"
+            else:
+                blocked_by_sentiment += 1
         elif state is not None and exit_[i]:
             pending = "sell"
 
@@ -148,7 +163,11 @@ def run_backtest(
         close_trade(n - 1, "end")
         equity[-1] = cash
 
-    return _report(df, equity[start:], times[start:], closes[start:], trades, initial_capital, interval, bars_in_market, max_curve_points)
+    result = _report(df, equity[start:], times[start:], closes[start:], trades, initial_capital, interval, bars_in_market, max_curve_points)
+    result["metrics"]["entries_blocked_by_sentiment"] = blocked_by_sentiment
+    no_data = risk.sentiment_filter != "off" and sentiment is None
+    result["metrics"]["sentiment_filter"] = "sem dados" if no_data else risk.sentiment_filter
+    return result
 
 
 def _report(df, equity, times, closes, trades, initial_capital, interval, bars_in_market, max_points) -> dict:

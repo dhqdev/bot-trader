@@ -58,7 +58,14 @@ export interface RiskConfig {
   cooldown_bars: number;
   max_daily_loss_quote: number;
   fee_pct: number;
+  sentiment_filter: SentimentFilter;
+  fear_threshold: number;
+  news_guard: NewsGuard;
+  news_window_hours: number;
 }
+
+export type SentimentFilter = "off" | "avoid_extreme_fear" | "rising" | "both";
+export type NewsGuard = "off" | "block_entries" | "block_and_exit";
 
 export interface StrategiesResponse {
   default: string;
@@ -81,6 +88,26 @@ export interface Snapshot {
   candle_time?: number;
   close?: number;
   evaluated_at?: string;
+  market?: MarketFilters;
+}
+
+export interface FearGreed {
+  value: number;
+  label: string;
+  day: string;
+  value_7d_ago: number | null;
+  change_7d: number | null;
+  stale: boolean;
+}
+
+/** Filtros de mercado no último candle avaliado pelo bot. */
+export interface MarketFilters {
+  sentiment_filter: SentimentFilter;
+  news_guard: NewsGuard;
+  sentiment?: FearGreed | null;
+  news_block?: { title: string; source: string; url: string; published_at: string; sentiment: number };
+  blocks_entry: boolean;
+  reason: string;
 }
 
 export interface Position {
@@ -243,9 +270,226 @@ export interface SystemInfo {
   version: string;
 }
 
+export interface KeyPermissions {
+  reading: boolean;
+  spot_trading: boolean;
+  withdrawals: boolean;
+  internal_transfer: boolean;
+  universal_transfer: boolean;
+  margin: boolean;
+  futures: boolean;
+  ip_restricted: boolean;
+}
+
 export interface Credentials {
-  binance: { configured: boolean; api_key: string | null; testnet: boolean; updated_at: string | null };
+  binance: {
+    configured: boolean;
+    api_key: string | null;
+    testnet: boolean;
+    updated_at: string | null;
+    permissions: KeyPermissions | null;
+    warnings: string[];
+    checked_at: string | null;
+  };
   anthropic: { configured: boolean; api_key: string | null; source: "db" | "env" | null; model: string };
+}
+
+export type LoginResult = User | { two_factor_required: true; ticket: string };
+
+export interface SecurityStatus {
+  two_factor: { enabled: boolean; recovery_codes_left: number };
+}
+
+export interface SecurityEvent {
+  id: number;
+  kind: string;
+  label: string;
+  ip: string;
+  user_agent: string;
+  detail: string;
+  created_at: string;
+}
+
+export interface TwoFactorSetup {
+  secret: string;
+  uri: string;
+  qr: string;
+}
+
+export interface NewsItem {
+  id: number;
+  url: string;
+  source: string;
+  lang: string;
+  title: string;
+  summary: string;
+  ai_summary: string;
+  published_at: string;
+  assets: string[];
+  sentiment: number;
+  impact: "low" | "medium" | "high";
+  category: string;
+  classified_by: "ai" | "keywords";
+}
+
+export interface SentimentResponse {
+  latest: FearGreed | null;
+  history: { date: string; value: number }[];
+  filters: Record<SentimentFilter, string>;
+}
+
+export interface NewsStatus {
+  last_fetch: { at: string; added: number; serious?: number; errors: Record<string, string> } | null;
+  last_ai: { at: string; classified: number; model: string } | null;
+  feeds: { name: string; url: string; lang: string }[];
+}
+
+export interface BotAlert {
+  bot_id: number;
+  name: string;
+  symbol: string;
+  asset: string;
+  status: Bot["status"];
+  blocked: boolean;
+  reason: string;
+  news: NewsItem | null;
+  sentiment_filter: SentimentFilter;
+  news_guard: NewsGuard;
+}
+
+export type AutopilotMode = "off" | "suggest" | "auto_paper" | "auto_all";
+
+export interface AutopilotConfig {
+  mode: AutopilotMode;
+  mode_label: string;
+  interval_hours: number;
+  allow_strategy_change: boolean;
+  live_authorized: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+}
+
+export interface RunMetrics {
+  return_pct: number;
+  drawdown_pct: number;
+  trades: number;
+  win_rate_pct: number;
+  profit_factor: number | null;
+  buy_hold_pct: number;
+  score: number;
+}
+
+export interface RunChange {
+  field: string;
+  label: string;
+  from: unknown;
+  to: unknown;
+}
+
+export interface RunResults {
+  in?: RunMetrics;
+  out?: RunMetrics;
+  full?: RunMetrics;
+  cross?: { delta: number; pairs?: { symbol: string; base: RunMetrics; candidate: RunMetrics }[] } | null;
+  passed?: boolean;
+  reasons?: string[];
+}
+
+export interface RunCandidate {
+  key: string;
+  label: string;
+  kind: string;
+  source: string;
+  note: string;
+  changes: RunChange[];
+  results: RunResults;
+  gain: number;
+}
+
+export interface TestedRow {
+  key: string;
+  label: string;
+  kind: string;
+  source: string;
+  changes: RunChange[];
+  in: RunMetrics | null;
+  out: RunMetrics | null;
+  full: RunMetrics | null;
+  cross: { delta: number } | null;
+  passed: boolean;
+  reasons: string[];
+  note: string;
+}
+
+export interface Finding {
+  level: "info" | "warn" | "bad";
+  code: string;
+  text: string;
+}
+
+export interface Followup {
+  days: number;
+  trades: number;
+  pnl_quote: number;
+  avg_trade_pct: number | null;
+}
+
+export type RunStatus = "running" | "suggested" | "applied" | "rejected" | "reverted" | "no_change" | "failed" | "superseded";
+
+export interface OptimizationRun {
+  id: number;
+  bot_id: number;
+  trigger: "manual" | "schedule";
+  status: RunStatus;
+  summary: string;
+  candidate: RunCandidate | null;
+  baseline: RunResults | null;
+  created_at: string;
+  finished_at: string | null;
+  applied_at: string | null;
+  reverted_at: string | null;
+  ai_model: string;
+  error: string;
+  findings: Finding[];
+  // só no detalhe
+  diagnostics?: { stats: Record<string, unknown>; findings: Finding[] } | null;
+  tested?: TestedRow[] | null;
+  ai_notes?: string;
+  baseline_full?: { period?: { start: number; split: number; end: number; bars: number; sentiment_data: boolean } } | null;
+  followup?: Followup | null;
+}
+
+export interface AutopilotBot {
+  bot: { id: number; name: string; symbol: string; interval: string; mode: Mode; status: Bot["status"]; strategy: string };
+  autopilot: AutopilotConfig;
+  running: boolean;
+  last_run: OptimizationRun | null;
+  suggestion: OptimizationRun | null;
+  last_applied: (OptimizationRun & { followup: Followup | null }) | null;
+}
+
+export interface AutopilotOverview {
+  bots: AutopilotBot[];
+  ai_configured: boolean;
+  modes: Record<AutopilotMode, string>;
+}
+
+export interface BotAutopilot {
+  autopilot: AutopilotConfig;
+  running: boolean;
+  last_run: OptimizationRun | null;
+  suggestion: OptimizationRun | null;
+}
+
+export interface Insight {
+  id: number;
+  bot_id: number | null;
+  symbol: string;
+  interval: string;
+  kind: "lesson" | "warning" | "observation";
+  text: string;
+  source: "ai" | "optimizer";
+  created_at: string;
 }
 
 export interface BacktestTrade {
@@ -284,6 +528,8 @@ export interface BacktestMetrics {
   bars: number;
   period_start: number;
   period_end: number;
+  entries_blocked_by_sentiment?: number;
+  sentiment_filter?: SentimentFilter | "sem dados";
 }
 
 export interface BacktestRequest {

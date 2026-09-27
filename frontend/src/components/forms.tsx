@@ -4,7 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { api } from "../lib/api";
 import { num } from "../lib/format";
-import type { Param, RiskConfig, StrategiesResponse, StrategyInfo } from "../lib/types";
+import type { NewsGuard, Param, RiskConfig, SentimentFilter, StrategiesResponse, StrategyInfo } from "../lib/types";
 import { Button, Field, Input, Select, Switch } from "./ui";
 
 export function useStrategies() {
@@ -275,6 +275,56 @@ export function RiskForm({ risk, onChange, quote = "USDT", lab = false }: { risk
           <NumberField label="Taxa da corretora" suffix="% por ordem" value={risk.fee_pct} step={0.01} onChange={(v) => set("fee_pct", v)} help="Descontada de cada compra e venda no resultado. Binance: 0,1% (0,075% pagando a taxa com BNB)." />
         </div>
       </Section>
+
+      <Section
+        title="Mercado: sentimento e notícias"
+        intro={
+          <>
+            Filtros que olham para fora do gráfico: o humor do mercado (Índice de Medo e Ganância, de 0 a 100) e notícias graves sobre a moeda.
+            {lab && " No laboratório só o filtro de sentimento entra no teste: não existe histórico de manchetes para simular a trava de notícias."}
+          </>
+        }
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Filtro de sentimento" help={SENTIMENT_HELP[risk.sentiment_filter]}>
+            <Select value={risk.sentiment_filter} onChange={(e) => set("sentiment_filter", e.target.value as SentimentFilter)}>
+              <option value="avoid_extreme_fear">Não comprar com medo extremo (padrão)</option>
+              <option value="rising">Só comprar com o sentimento subindo na semana</option>
+              <option value="both">Os dois juntos</option>
+              <option value="off">Desligado</option>
+            </Select>
+          </Field>
+          {(risk.sentiment_filter === "avoid_extreme_fear" || risk.sentiment_filter === "both") && (
+            <NumberField label="Medo extremo até" suffix="índice" value={risk.fear_threshold} step={1} min={5} onChange={(v) => set("fear_threshold", Math.round(v))} help="Com o índice igual ou abaixo disso, não compra. 20 foi o valor testado." />
+          )}
+          <Field label="Trava de notícias" help={NEWS_HELP[risk.news_guard]}>
+            <Select value={risk.news_guard} onChange={(e) => set("news_guard", e.target.value as NewsGuard)}>
+              <option value="block_entries">Não comprar com notícia grave (padrão)</option>
+              <option value="block_and_exit">Não comprar e vender a posição</option>
+              <option value="off">Desligada</option>
+            </Select>
+          </Field>
+          {risk.news_guard !== "off" && (
+            <NumberField label="Vale por" suffix="horas" value={risk.news_window_hours} step={1} min={1} onChange={(v) => set("news_window_hours", Math.round(v))} help="Por quanto tempo uma notícia grave trava as compras." />
+          )}
+        </div>
+      </Section>
     </div>
   );
 }
+
+const SENTIMENT_HELP: Record<SentimentFilter, string> = {
+  avoid_extreme_fear:
+    "Com o índice em medo extremo, não compra: costuma ser mercado em queda forte. Nos testes, manteve ou melhorou todas as estratégias de 4 h, com quedas menores (Squeeze 4h: +20,9% → +23,3%).",
+  rising: "Só compra se o índice estiver acima do valor de 7 dias atrás. Nos testes, ajudou muito em candles de 1-2 h (Ignição 1h: +2,7% → +8,3%), mas atrapalhou em 4 h.",
+  both: "Junta os dois: compra menos vezes, com quedas menores.",
+  off: "Ignora o sentimento do mercado.",
+};
+
+const NEWS_HELP: Record<NewsGuard, string> = {
+  block_entries:
+    "Com notícia grave e negativa sobre a moeda (ou sobre o mercado todo, como um problema na Binance), o bot não compra por algumas horas. Vale a classificação da IA ou a mesma notícia em duas fontes.",
+  block_and_exit:
+    "Além de não comprar, vende a posição aberta se a notícia grave sair depois da compra e for confirmada pela IA. Não dá para testar isso em backtest: use com cautela.",
+  off: "Ignora as notícias.",
+};

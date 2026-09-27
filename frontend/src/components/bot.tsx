@@ -1,8 +1,8 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Check, Info, Radio, X } from "lucide-react";
-import { dateTime, duration, num, pct, price, qty, REASONS, timeAgo } from "../lib/format";
-import type { Bot, BotEvent, OrderRow, Position, Snapshot } from "../lib/types";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Check, ExternalLink, Info, Radio, ShieldAlert, ShieldCheck, X } from "lucide-react";
+import { dateTime, duration, NEWS_GUARD_LABELS, num, pct, price, qty, REASONS, SENTIMENT_FILTER_LABELS, timeAgo } from "../lib/format";
+import type { Bot, BotEvent, MarketFilters, OrderRow, Position, Snapshot } from "../lib/types";
 import { Badge, Dot, Empty, Pnl } from "./ui";
 
 export function ModeBadge({ mode }: { mode: Bot["mode"] }) {
@@ -16,8 +16,34 @@ export function StatusBadge({ bot }: { bot: Pick<Bot, "status" | "running" | "st
   return <Badge><Dot tone="neutral" />Parado</Badge>;
 }
 
-export function ChecksList({ snapshot, quote }: { snapshot: Snapshot | null | undefined; quote?: string }) {
+/** Sentimento do mercado e trava de notícias na última avaliação do bot. */
+export function MarketFiltersView({ market }: { market: MarketFilters }) {
+  const s = market.sentiment;
+  const week = s && s.change_7d != null ? `, ${s.change_7d > 0 ? "+" : ""}${s.change_7d} na semana` : "";
+  return (
+    <div className="space-y-1.5 border-t border-line pt-3 text-xs">
+      <div className="flex items-center gap-1.5 font-medium text-ink-2">
+        {market.blocks_entry ? <ShieldAlert className="size-3.5 text-warn-text" /> : <ShieldCheck className="size-3.5 text-good-text" />}
+        Filtros de mercado: {market.blocks_entry ? <span className="text-warn-text">compras travadas</span> : <span className="text-good-text">liberado</span>}
+      </div>
+      {market.blocks_entry && market.reason && <p className="text-warn-text">{market.reason}</p>}
+      <p className="text-ink-2">
+        Medo e ganância: {s ? <span className="text-ink">{s.value} ({s.label}){week}</span> : "sem dado"} · filtro{" "}
+        {SENTIMENT_FILTER_LABELS[market.sentiment_filter] ?? market.sentiment_filter}
+      </p>
+      <p className="text-ink-2">Notícias: trava {NEWS_GUARD_LABELS[market.news_guard] ?? market.news_guard}</p>
+      {market.news_block && (
+        <a href={market.news_block.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-start gap-1 text-warn-text hover:underline">
+          {market.news_block.title} ({market.news_block.source}) <ExternalLink className="mt-0.5 size-3 shrink-0" />
+        </a>
+      )}
+    </div>
+  );
+}
+
+export function ChecksList({ snapshot, quote, market }: { snapshot: Snapshot | null | undefined; quote?: string; market?: MarketFilters | null }) {
   if (!snapshot) return <Empty title="Sem avaliação ainda">As condições aparecem após o primeiro candle fechado.</Empty>;
+  const filters = market ?? snapshot.market;
   const required = snapshot.entry_checks.filter((c) => !c.label.startsWith("· "));
   const info = snapshot.entry_checks.filter((c) => c.label.startsWith("· "));
   return (
@@ -49,6 +75,7 @@ export function ChecksList({ snapshot, quote }: { snapshot: Snapshot | null | un
           ))}
         </div>
       )}
+      {filters && <MarketFiltersView market={filters} />}
     </div>
   );
 }

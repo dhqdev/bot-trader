@@ -22,22 +22,38 @@ class RegisterIn(BaseModel):
 
 
 class LoginIn(BaseModel):
-    email: str
-    password: str
+    email: str = Field(max_length=255)
+    password: str = Field(max_length=128)
+
+
+class TwoFactorLoginIn(BaseModel):
+    ticket: str = Field(max_length=2000)
+    code: str = Field(min_length=6, max_length=32)
 
 
 class PasswordIn(BaseModel):
-    current_password: str
+    current_password: str = Field(max_length=128)
     new_password: str = Field(min_length=8, max_length=128)
 
 
-class BinanceKeysIn(BaseModel):
+class StepUpIn(BaseModel):
+    """Confirmação para ações sensíveis: senha e, se ativado, o código de 2 etapas."""
+
+    password: str = Field("", max_length=128)
+    code: str | None = Field(None, max_length=32)
+
+
+class TwoFactorCodeIn(BaseModel):
+    code: str = Field(min_length=6, max_length=32)
+
+
+class BinanceKeysIn(StepUpIn):
     api_key: str = Field(min_length=10, max_length=256)
     api_secret: str = Field(min_length=10, max_length=256)
     testnet: bool = False
 
 
-class AnthropicKeyIn(BaseModel):
+class AnthropicKeyIn(StepUpIn):
     api_key: str = Field(min_length=10, max_length=512)
 
 

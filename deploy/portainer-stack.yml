@@ -22,7 +22,10 @@ services:
       BT_ALLOW_REGISTRATION: ${BT_ALLOW_REGISTRATION:-false}
       BT_ENGINE_POLL_SECONDS: ${BT_ENGINE_POLL_SECONDS:-15}
       BT_AI_MODEL: ${BT_AI_MODEL:-claude-opus-5}
+      BT_AI_FAST_MODEL: ${BT_AI_FAST_MODEL:-claude-haiku-4-5}
       BT_ANTHROPIC_API_KEY: ${BT_ANTHROPIC_API_KEY:-}
+      BT_SCHEDULER_ENABLED: ${BT_SCHEDULER_ENABLED:-true}
+      BT_NEWS_ENABLED: ${BT_NEWS_ENABLED:-true}
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:

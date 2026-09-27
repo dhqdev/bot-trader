@@ -82,8 +82,31 @@ export const REASONS: Record<string, string> = {
   trailing_stop: "Trailing stop",
   take_profit: "Alvo parcial",
   manual: "Manual",
+  news: "Notícia",
   end: "Fim do teste",
 };
+
+export const SENTIMENT_FILTER_LABELS: Record<string, string> = {
+  off: "desligado",
+  avoid_extreme_fear: "evita medo extremo",
+  rising: "só com sentimento subindo",
+  both: "evita medo extremo e só subindo",
+};
+
+export const NEWS_GUARD_LABELS: Record<string, string> = {
+  off: "desligada",
+  block_entries: "bloqueia compras",
+  block_and_exit: "bloqueia compras e vende",
+};
+
+/** Cor do índice de medo e ganância: medo = vermelho, ganância = verde. */
+export function fearGreedTone(v: number | null | undefined): "bad" | "warn" | "neutral" | "good" {
+  if (v == null) return "neutral";
+  if (v <= 24) return "bad";
+  if (v <= 45) return "warn";
+  if (v <= 55) return "neutral";
+  return "good";
+}
 
 export const INTERVAL_LABELS: Record<string, string> = {
   "1m": "1 minuto",

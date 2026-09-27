@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Bot as BotIcon, Plus } from "lucide-react";
+import { Bot as BotIcon, Plus, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ModeBadge, StatusBadge, EventsList, PositionsTable } from "../components/bot";
@@ -7,8 +7,47 @@ import { DailyPnlChart, EquityChart } from "../components/charts";
 import { TierBadge } from "../components/profiles";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Pnl, Segmented, Stat } from "../components/ui";
 import { api } from "../lib/api";
-import { duration, money, num, pct, signedMoney } from "../lib/format";
-import type { Credentials, Dashboard } from "../lib/types";
+import { duration, fearGreedTone, money, num, pct, signedMoney } from "../lib/format";
+import type { BotAlert, Credentials, Dashboard, SentimentResponse } from "../lib/types";
+
+const TONE_TEXT = { bad: "text-bad-text", warn: "text-warn-text", neutral: "text-ink", good: "text-good-text" } as const;
+
+/** Humor do mercado e travas por notícia, com link para a aba de notícias. */
+function MarketCard() {
+  const sentiment = useQuery({ queryKey: ["sentiment"], queryFn: () => api.get<SentimentResponse>("/news/sentiment?days=120"), refetchInterval: 600_000 });
+  const alerts = useQuery({ queryKey: ["news-alerts"], queryFn: () => api.get<BotAlert[]>("/news/alerts"), refetchInterval: 60_000 });
+  const latest = sentiment.data?.latest;
+  const blocked = (alerts.data ?? []).filter((a) => a.blocked);
+  return (
+    <Card title="Mercado agora" action={<Link to="/ai/noticias" className="text-xs text-accent hover:underline">notícias</Link>}>
+      <div className="space-y-2 text-sm">
+        {latest ? (
+          <div className="flex items-baseline gap-2">
+            <span className={`text-2xl font-semibold tabular ${TONE_TEXT[fearGreedTone(latest.value)]}`}>{latest.value}</span>
+            <span className="text-ink-2">
+              {latest.label}
+              {latest.change_7d != null ? ` · ${latest.change_7d > 0 ? "+" : ""}${latest.change_7d} na semana` : ""}
+            </span>
+          </div>
+        ) : (
+          <p className="text-muted">Índice de medo e ganância ainda não baixado.</p>
+        )}
+        {blocked.length > 0 ? (
+          <ul className="space-y-1 text-xs">
+            {blocked.map((a) => (
+              <li key={a.bot_id} className="flex gap-1.5 text-warn-text">
+                <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
+                <span><Link to={`/bots/${a.bot_id}`} className="font-medium hover:underline">{a.name}</Link>: {a.reason}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted">Nenhum bot com compras travadas por sentimento ou notícia.</p>
+        )}
+      </div>
+    </Card>
+  );
+}
 
 type ModeFilter = "live" | "paper" | "all";
 
@@ -186,6 +225,7 @@ export function DashboardPage() {
         </Card>
         <div className="space-y-4">
           <Balance />
+          <MarketCard />
           <Card title="Por estratégia">
             {data.by_strategy.length ? (
               <ul className="space-y-2 text-sm">

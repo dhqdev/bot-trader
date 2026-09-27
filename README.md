@@ -1,6 +1,6 @@
 # Bot Trader
 
-Sistema pessoal de trading automatizado na Binance Spot, com painel web: login, chaves de API criptografadas, bots que você liga e desliga, gráficos de resultado, laboratório de backtest e análise com IA (Claude).
+Sistema pessoal de trading automatizado na Binance Spot, com painel web: login com verificação em duas etapas, chaves de API criptografadas, bots que você liga e desliga, gráficos de resultado, laboratório de backtest, leitura de notícias e do sentimento do mercado, análise com IA (Claude) e um **piloto automático** que testa e aplica melhorias nas estratégias sozinho.
 
 > Uso por sua conta e risco. Nenhuma estratégia garante lucro. Comece sempre em modo **simulado**.
 
@@ -24,7 +24,7 @@ Se o PowerShell bloquear: `powershell -ExecutionPolicy Bypass -File .\start.ps1`
 ### Primeiro uso
 
 1. **Crie sua conta.** O primeiro cadastro vira o dono do sistema; depois disso o cadastro fecha.
-2. **Configurações:** cole as chaves da Binance (e, se quiser a IA, a chave da Anthropic). Elas são criptografadas no banco e nunca voltam para a tela.
+2. **Configurações:** ative a **verificação em duas etapas** e cole as chaves da Binance (e, se quiser a IA, a chave da Anthropic). Elas são criptografadas no banco e nunca voltam para a tela; chaves com permissão de saque são recusadas.
 3. **Laboratório:** teste estratégias no par que você quer operar, em candles de 4 horas. Use "Comparar todas as estratégias" e leia a análise automática do resultado.
 4. **Bots → Novo bot**, em modo **Simulado**. Ele usa preços reais, com taxa e slippage, sem gastar dinheiro.
 5. Acompanhe pelo **Painel**. Quando estiver confiante, edite o bot e troque para **Real**.
@@ -37,7 +37,11 @@ O botão **Sistema ligado/desligado**, no topo, para ou retoma todos os bots de 
 - **Bots:** status, tempo de operação e resultado de cada bot.
 - **Detalhe do bot:** gráfico de candles com indicadores, compras e vendas, linhas de entrada/stop/alvo, a lista de **condições da estratégia** (o que falta para comprar ou vender), posição aberta, operações, ordens e log de eventos. Tem os botões para ligar/parar, encerrar a posição e analisar com IA.
 - **Laboratório:** guia de uso, explicação de cada campo, backtest com taxa, slippage, stop e alvos, comparação contra o buy & hold e entre estratégias, leitura automática do resultado e "Criar bot com esta configuração".
-- **Análise IA:** chat com o Claude. Ele consulta seus bots, o mercado e **roda backtests** para embasar as respostas. Só lê dados: não envia ordens nem altera bots. Os relatórios ficam salvos.
+- **Análise IA**, em três abas:
+  - **Conversa:** chat com o Claude. Ele consulta seus bots, o mercado, as notícias, o diagnóstico do piloto e **roda backtests** para embasar as respostas. Só lê dados: não envia ordens nem altera bots. Os relatórios ficam salvos.
+  - **Piloto automático:** o que foi diagnosticado, testado e mudado em cada bot, com os botões para aplicar, recusar ou desfazer, e as lições que a IA acumulou.
+  - **Notícias e sentimento:** notícias classificadas (moedas afetadas, sentimento, impacto), o Índice de Medo e Ganância e quais bots estão com compras travadas agora.
+- **Configurações:** chaves (com conferência das permissões na Binance), verificação em duas etapas, sessões abertas e atividade recente da conta.
 
 ## Estratégias
 
@@ -60,14 +64,16 @@ Ao criar um bot (ou no Laboratório), escolha um **perfil pronto**. Ele preenche
 
 | Nível | Perfil | Candle | Cada operação dura | Resultado típico | Casos com lucro |
 |---|---|---|---|---|---|
-| **Rápido** (risco alto, experimental) | Repique rápido | 5 min | ~46 min | −3,4% em 45 dias | 4% |
-| | Ignição rápida | 15 min | ~1,5 h | −13,8% em 4 meses | 0% |
-| **Médio** (risco médio) | Ignição 1h | 1 h | ~17 h | +2,7% em 6 meses | 55% |
-| | HiLo 2h com trailing | 2 h | ~21 h | +0,7% em 8 meses | 57% |
-| **Lento** (risco baixo) | **Squeeze 4h** (recomendado) | 4 h | ~3 dias | +20,9% em 1 ano | 71% |
-| | Confluência diária | 1 dia | ~3 semanas | +23,6% em 18 meses | 77% |
+| **Rápido** (risco alto, experimental) | Repique rápido | 5 min | ~46 min | −2,6% em 45 dias | 7% |
+| | Ignição rápida | 15 min | ~1,5 h | −8,4% em 4 meses | 4% |
+| **Médio** (risco médio) | Ignição 1h | 1 h | ~17 h | +8,3% em 6 meses | 62% |
+| | HiLo 2h com trailing | 2 h | ~21 h | +4,3% em 8 meses | 64% |
+| **Lento** (risco baixo) | **Squeeze 4h** (recomendado) | 4 h | ~3 dias | +23,3% em 1 ano | 73% |
+| | Confluência diária | 1 dia | ~3 semanas | +23,1% em 18 meses | 77% |
 
-**Sobre o nível Rápido:** nos testes, **nenhuma** estratégia de minutos lucrou depois dos custos. Foram 9 estratégias, 3 regras de risco, candles de 5 e 15 minutos e 14 pares. Cada operação paga cerca de 0,3% entre taxa e slippage, e os movimentos de poucos minutos costumam ser menores que isso. Mesmo pagando a taxa com BNB (0,075%), a melhor ficou em −1,5%. O nível existe porque você pode querer testá-lo, mas começa no modo simulado, e usá-lo com dinheiro real exige uma confirmação explícita.
+Os números já incluem o **filtro de sentimento** de cada perfil (ver abaixo), medido com o Índice de Medo e Ganância real de cada dia.
+
+**Sobre o nível Rápido:** nos testes, **nenhuma** estratégia de minutos lucrou depois dos custos. Foram 9 estratégias, 3 regras de risco, candles de 5 e 15 minutos e 14 pares. Cada operação paga cerca de 0,3% entre taxa e slippage, e os movimentos de poucos minutos costumam ser menores que isso. Mesmo pagando a taxa com BNB (0,075%), a melhor ficou em −1,2%. O nível existe porque você pode querer testá-lo, mas começa no modo simulado, e usá-lo com dinheiro real exige uma confirmação explícita.
 
 ### Como foram escolhidas (e o que esperar)
 
@@ -104,8 +110,41 @@ O que isso significa:
 - **Stop:** por volatilidade (padrão: 3× ATR, no mínimo 0,5%) ou percentual.
 - **Opcionais:** break-even, trailing stop (ATR ou %), até 5 alvos parciais.
 - **Disciplina:** pausa após saída e perda diária máxima (bloqueia novas compras no dia).
+- **Sentimento do mercado:** filtro de compras pelo Índice de Medo e Ganância (ver abaixo).
+- **Notícias:** trava de compras (e, se quiser, venda da posição) com notícia grave sobre a moeda.
 - Stops e alvos são conferidos a cada ~15 s com o preço atual, não só no fechamento do candle.
 - Cada bot só vende o que ele mesmo comprou; ativos que já estão na sua carteira não são tocados.
+
+## Sentimento do mercado e notícias
+
+**Índice de Medo e Ganância** (alternative.me, diário, de 0 a 100). Testado como filtro de compras em 14 pares, com o valor real de cada dia e sem olhar o futuro:
+
+| Filtro | O que faz | Nos testes |
+|---|---|---|
+| **Evitar medo extremo** (padrão) | Não compra com o índice ≤ 20 | Manteve ou melhorou todas as estratégias de 4 h, com quedas menores (Squeeze 4h: +20,9% → +23,3%; HiLo 2h: +0,7% → +4,3%) |
+| **Sentimento subindo** | Só compra com o índice acima do de 7 dias antes | Ótimo em 1-2 h (Ignição 1h: +2,7% → +8,3%, queda média −19,8% → −15,9%), ruim em 4 h |
+| Os dois | Junta as duas regras | Menos operações e quedas menores |
+
+Evitar ganância alta e "só entre 25 e 75" foram testados e **descartados** (resultados inconsistentes entre os grupos de pares).
+
+**Notícias:** a cada 15 minutos o sistema lê CoinDesk, Cointelegraph, Decrypt, The Block, CryptoSlate, Livecoins e Portal do Bitcoin, identifica as moedas citadas e classifica sentimento e impacto (por palavras-chave na hora e, com a chave da Anthropic, pela IA a cada 30 minutos; notícia que parece grave é revisada pela IA na hora).
+
+- **Trava de compras (padrão):** notícia grave e bem negativa sobre a moeda do bot, ou sobre o mercado todo (ex.: problema na Binance), impede compras por 12 horas. Vale a classificação da IA ou a mesma notícia grave em duas fontes, para evitar alarme falso.
+- **Trava + venda (opcional):** também vende a posição se a notícia sair depois da compra e for confirmada pela IA.
+- Notícias boas **não** disparam compras: comprar na euforia da manchete costuma ser comprar no topo. Elas entram na análise da IA.
+- Não existe histórico de manchetes para backtest, então a trava de notícias não aparece nos resultados do Laboratório. O filtro de sentimento aparece.
+
+## Piloto automático (o sistema que se aperfeiçoa sozinho)
+
+A cada ciclo (por padrão: todo dia no nível Rápido, a cada 3 dias no Médio e toda semana no Lento, ou pelo botão **Otimizar agora**), para cada bot ligado:
+
+1. **Diagnóstico ("backlog"):** lê as operações, stops, sinais ignorados e erros do bot e aponta os problemas (ex.: muitos stops logo após a compra, resultado real abaixo do backtest, ordens abaixo do mínimo).
+2. **Candidatas:** variações de **uma coisa por vez**: cada parâmetro da estratégia um pouco para cima e para baixo, stop, trailing, alvo, break-even, pausa, filtro de sentimento, outras estratégias, a configuração anterior e as ideias da IA.
+3. **Validação honesta:** o histórico (2 anos) é dividido em duas partes. A escolha usa só os 2/3 mais antigos; o 1/3 mais recente, que a escolha não viu, serve de confirmação. A candidata também não pode piorar em BTC e ETH.
+4. **Decisão:** só muda se melhorar nas duas partes, sem aumentar a queda máxima, com operações suficientes. No máximo uma mudança a cada 5 dias por bot. Nunca mexe no par, no tempo de candle, no modo (simulado/real) nem no valor das ordens, e nunca tira o stop.
+5. **Aprendizado:** cada ciclo fica registrado, junto com o resultado real depois da mudança. Com a chave da Anthropic, a IA escreve a análise, guarda lições ("o que a IA aprendeu") e propõe ideias novas, que passam pelas mesmas regras. No ciclo seguinte ela recebe esse histórico.
+
+Modos: **aplica sozinho nos simulados** (padrão), **só sugere**, **aplica sozinho também nos reais** (exige confirmar senha e 2FA; troca de estratégia em bot real sempre espera sua aprovação) ou desligado. Qualquer mudança pode ser desfeita com um clique.
 
 ## App no celular (PWA)
 
@@ -160,10 +199,15 @@ docker compose --profile https up -d --build  # HTTPS automático via Caddy (apo
 
 ## Segurança
 
-- Na Binance, crie a chave de API **sem permissão de saque**, com **Spot Trading** habilitado e **restrita ao IP do servidor**.
-- As chaves são criptografadas (Fernet) com uma chave derivada de `BT_SECRET_KEY`; a interface só mostra as pontas (`ABCD••••WXYZ`).
-- A sessão fica num cookie httpOnly (SameSite=Lax); o login tem limite de tentativas.
-- A IA só tem ferramentas de leitura e backtest.
+- **Chaves da Binance:** crie a chave **sem permissão de saque**, com **Spot Trading** e **restrita ao IP do servidor**. Ao salvar, o sistema confere as permissões na própria Binance e **recusa chaves com saque liberado**; avisa se faltar restrição de IP ou se houver permissões desnecessárias (margem, futuros, transferências).
+- **Criptografia:** as chaves ficam criptografadas (Fernet) com uma chave derivada de `BT_SECRET_KEY`; a interface só mostra as pontas (`ABCD••••WXYZ`). A IA nunca recebe chaves.
+- **Verificação em duas etapas (TOTP):** com qualquer app autenticador, com QR code, 10 códigos de recuperação de uso único e proteção contra reuso do mesmo código.
+- **Confirmação de ações sensíveis:** trocar as chaves, desligar o 2FA, gerar códigos de recuperação e liberar o piloto automático em bots reais pedem a senha (e o código de 2 etapas). Quem pegar uma sessão aberta não consegue fazer isso.
+- **Sessões:** cookie httpOnly, `SameSite=Strict` e `Secure` em HTTPS. "Sair dos outros aparelhos" e a troca de senha derrubam as outras sessões na hora.
+- **Tentativas de login:** limite por IP e por conta; e-mail inexistente responde igual a senha errada, no mesmo tempo.
+- **Proteção do site:** CSP restrita (só scripts do próprio site), HSTS, `X-Frame-Options: DENY`, `Permissions-Policy`, COOP/CORP, bloqueio de requisições que mudam dados vindas de outros sites (inclusive subdomínios), limite de tamanho das requisições e `Cache-Control: no-store` na API.
+- **Registro de atividade:** logins, falhas, trocas de senha e de chaves, 2FA e autorizações ficam registrados com IP e aparelho (Configurações → Atividade recente).
+- **Notícias** vêm de sites externos: o XML é lido com proteção contra ataques (defusedxml) e o texto é tratado como dado, nunca como instrução para a IA. As ideias da IA passam pelos limites dos parâmetros e pelos mesmos testes de qualquer mudança.
 - O arquivo `.env` antigo na raiz ainda tem suas chaves em texto puro. Depois de cadastrá-las pela interface, **apague esse arquivo** (ou gere chaves novas na Binance).
 
 ## Estrutura
@@ -171,11 +215,13 @@ docker compose --profile https up -d --build  # HTTPS automático via Caddy (apo
 ```
 backend/
   app/
-    core/            indicadores, estratégias, risco, backtest, exchange (Binance/simulado), motor
-    api/             rotas REST (auth, bots, painel, mercado, backtest, IA, configurações)
-    services/        estatísticas, backtests, análise de mercado, agente de IA
-    models.py        tabelas (SQLAlchemy): usuários, chaves, bots, posições, ordens, eventos, relatórios
-  tests/             74 testes: indicadores, ausência de look-ahead, risco, backtest, motor, API, IA
+    core/            indicadores, estratégias, risco, backtest, exchange, motor, sentimento, trava de notícias
+    api/             rotas REST (auth, segurança, bots, painel, mercado, backtest, IA, piloto, notícias)
+    services/        estatísticas, backtests, agente de IA, notícias, piloto automático, agendador
+    models.py        tabelas (SQLAlchemy): usuários, chaves, bots, posições, ordens, eventos, relatórios,
+                     2FA/sessões, atividade, notícias, medo e ganância, ciclos do piloto, lições da IA
+  tests/             106 testes: indicadores, ausência de look-ahead, risco, backtest, motor, API, IA,
+                     segurança (CSRF, 2FA, sessões), notícias, sentimento e piloto automático
 frontend/            React + Vite + TypeScript + Tailwind (lightweight-charts e Recharts)
 legacy/              código antigo, preservado para consulta (pode apagar)
 deploy/portainer-swarm-traefik.yml   stack Swarm + Traefik (trade.tekvosoft.com)

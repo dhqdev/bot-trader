@@ -23,6 +23,17 @@ def offline(monkeypatch):
     monkeypatch.setattr(manager, "spawn", lambda bot_id: None)  # sem threads nos testes
     monkeypatch.setattr(backtesting, "history", lambda symbol, interval, bars: make_ohlcv(min(bars, 3000)))
     monkeypatch.setattr("app.services.stats.prices.get", lambda symbol, testnet=False: market.current)
+    monkeypatch.setattr("app.core.exchange.inspect_api_key", fake_inspect)
+
+
+SAFE_PERMISSIONS = {
+    "reading": True, "spot_trading": True, "withdrawals": False, "internal_transfer": False,
+    "universal_transfer": False, "margin": False, "futures": False, "ip_restricted": True,
+}  # fmt: skip
+
+
+def fake_inspect(api_key, api_secret, testnet=False):
+    return {"can_trade": True, "account_type": "SPOT", "permissions": dict(SAFE_PERMISSIONS)}
 
 
 def test_auth_flow(client):
@@ -47,7 +58,10 @@ def test_auth_flow(client):
 
 def test_credentials_are_masked(client):
     key, secret = "ABCDEFGHIJKLMNOPQRSTUV123456", "SECRETSECRETSECRETSECRET999"
-    assert client.put("/api/settings/binance", json={"api_key": key, "api_secret": secret}).status_code == 200
+    # trocar chaves exige a senha
+    assert client.put("/api/settings/binance", json={"api_key": key, "api_secret": secret}).status_code == 403
+    r = client.put("/api/settings/binance", json={"api_key": key, "api_secret": secret, "password": "senha-forte-1"})
+    assert r.status_code == 200, r.text
     body = client.get("/api/settings/credentials").json()
     assert body["binance"]["configured"] is True
     assert body["binance"]["api_key"] == "ABCD••••3456"

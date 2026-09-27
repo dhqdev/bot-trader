@@ -240,6 +240,22 @@ class BinanceTrader:
             "balances": balances,
         }
 
+    def api_permissions(self) -> dict | None:
+        """Permissões da chave (a testnet não tem esse endpoint)."""
+        if self.testnet:
+            return None
+        raw = self._call(self.client.get_account_api_permissions)
+        return {
+            "reading": bool(raw.get("enableReading")),
+            "spot_trading": bool(raw.get("enableSpotAndMarginTrading")),
+            "withdrawals": bool(raw.get("enableWithdrawals")),
+            "internal_transfer": bool(raw.get("enableInternalTransfer")),
+            "universal_transfer": bool(raw.get("permitsUniversalTransfer")),
+            "margin": bool(raw.get("enableMargin")),
+            "futures": bool(raw.get("enableFutures")),
+            "ip_restricted": bool(raw.get("ipRestrict")),
+        }
+
     def _fee_to_quote(self, amount: float, asset: str, rules: SymbolRules, price: float) -> float:
         if amount == 0:
             return 0.0
@@ -303,6 +319,13 @@ class BinanceTrader:
             newOrderRespType="FULL",
         )
         return self._parse(order, rules)
+
+
+def inspect_api_key(api_key: str, api_secret: str, testnet: bool = False) -> dict:
+    """Confere a chave na Binance: se ela lê a conta e quais permissões tem."""
+    trader = BinanceTrader(api_key, api_secret, testnet=testnet)
+    summary = trader.account_summary()
+    return {"can_trade": summary["can_trade"], "account_type": summary["account_type"], "permissions": trader.api_permissions()}
 
 
 class PaperTrader:

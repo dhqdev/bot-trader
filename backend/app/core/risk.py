@@ -53,6 +53,15 @@ class RiskConfig(BaseModel):
     max_daily_loss_quote: float = Field(0.0, ge=0, description="0 desativa")
     fee_pct: float = Field(0.1, ge=0, le=2)
 
+    # sentimento do mercado (índice de medo e ganância): filtra as compras.
+    # Padrão validado em backtest: evitar comprar com medo extremo (<= 20).
+    sentiment_filter: Literal["off", "avoid_extreme_fear", "rising", "both"] = "avoid_extreme_fear"
+    fear_threshold: int = Field(20, ge=5, le=50)
+
+    # notícias: bloqueia compras (e opcionalmente vende) com notícia muito negativa
+    news_guard: Literal["off", "block_entries", "block_and_exit"] = "block_entries"
+    news_window_hours: int = Field(12, ge=1, le=72)
+
     @field_validator("take_profits")
     @classmethod
     def _sort_tps(cls, v: list[TakeProfitLevel]) -> list[TakeProfitLevel]:

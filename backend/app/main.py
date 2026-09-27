@@ -1,6 +1,7 @@
 import logging
 import mimetypes
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,11 +13,13 @@ from app.api import api_router
 from app.config import get_settings
 from app.core.engine import manager
 from app.db import init_db
+from app.services.scheduler import scheduler
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 mimetypes.add_type("text/javascript", ".js")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # uma linha por notícia/feed baixado polui o log
 log = logging.getLogger("bot_trader")
 
 
@@ -27,7 +30,10 @@ async def lifespan(_: FastAPI):
     if settings.engine_autostart:
         manager.start()
         log.info("Motor iniciado (%s bots ativos).", manager.running_count())
+    if settings.scheduler_enabled:
+        scheduler.start()
     yield
+    scheduler.stop()
     manager.shutdown()
 
 
@@ -45,24 +51,80 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type"],
+)
+
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+MAX_BODY = 1_000_000
+MAX_BODY_CHAT = 5_000_000  # conversa com a IA pode levar o resultado de um backtest
+
+# Só scripts e estilos do próprio site; nada de iframes, plugins ou envio de formulários para fora.
+CSP = "; ".join(
+    [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob:",
+        "font-src 'self' data:",
+        "connect-src 'self'",
+        "worker-src 'self'",
+        "manifest-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ]
 )
 
 
+def _origin_allowed(request: Request) -> bool:
+    """Proteção contra CSRF: ações que mudam algo só podem vir das páginas do próprio sistema.
+
+    O cookie de sessão já é SameSite=Strict; isto cobre também subdomínios
+    (ex.: outro serviço em *.tekvosoft.com), que o navegador considera "mesmo site".
+    """
+    origin = request.headers.get("origin")
+    if origin:
+        if origin in settings.cors_origin_list:
+            return True
+        return urlsplit(origin).netloc.lower() == request.headers.get("host", "").lower()
+    site = request.headers.get("sec-fetch-site")
+    return site in (None, "same-origin", "none")
+
+
 @app.middleware("http")
-async def security_headers(request: Request, call_next):
-    response = await call_next(request)
+async def guard(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/assets/"):
+    if path.startswith("/api/"):
+        if request.method in UNSAFE_METHODS and not _origin_allowed(request):
+            return JSONResponse({"detail": "Origem da requisição não permitida."}, status_code=403)
+        length = request.headers.get("content-length")
+        limit = MAX_BODY_CHAT if path == "/api/ai/chat" else MAX_BODY
+        if length and length.isdigit() and int(length) > limit:
+            return JSONResponse({"detail": "Requisição grande demais."}, status_code=413)
+
+    response = await call_next(request)
+
+    headers = response.headers
+    if path.startswith("/api/"):
+        headers.setdefault("Cache-Control", "no-store")
+    elif path.startswith("/assets/"):
         # nomes com hash: o conteúdo nunca muda
-        response.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
-    elif not path.startswith("/api/") and (path in ("/sw.js", "/manifest.webmanifest") or "text/html" in response.headers.get("content-type", "")):
+        headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
+    elif path in ("/sw.js", "/manifest.webmanifest") or "text/html" in headers.get("content-type", ""):
         # service worker, manifesto e páginas sempre revalidados, para as atualizações chegarem
-        response.headers.setdefault("Cache-Control", "no-cache")
-    response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("Referrer-Policy", "same-origin")
+        headers.setdefault("Cache-Control", "no-cache")
+    if not path.startswith("/api/docs"):
+        headers.setdefault("Content-Security-Policy", CSP)
+    if settings.cookie_secure:
+        headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    headers.setdefault("X-Content-Type-Options", "nosniff")
+    headers.setdefault("X-Frame-Options", "DENY")
+    headers.setdefault("Referrer-Policy", "same-origin")
+    headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+    headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
     return response
 
 

@@ -6,6 +6,7 @@ import pandas as pd
 from app.core.backtest import run_backtest
 from app.core.exchange import INTERVAL_MINUTES, get_market
 from app.core.risk import RiskConfig
+from app.core.sentiment import sentiment
 from app.core.strategies import STRATEGIES, get_strategy
 
 MAX_BARS = 20_000
@@ -30,6 +31,16 @@ def history(symbol: str, interval: str, bars: int) -> pd.DataFrame:
     return df
 
 
+def aligned_sentiment(df: pd.DataFrame, risk: RiskConfig):
+    """Índice de medo e ganância alinhado aos candles (o mesmo filtro que o bot usa ao vivo)."""
+    if risk.sentiment_filter == "off":
+        return None
+    try:
+        return sentiment.aligned(df)
+    except Exception:
+        return None
+
+
 def bars_for(interval: str, days: int, warmup: int) -> int:
     return int(days * 1440 / INTERVAL_MINUTES[interval]) + warmup
 
@@ -48,7 +59,7 @@ def backtest(
     resolved = strat.resolve_params(params)
     warmup = strat.warmup(resolved) // 2
     df = history(symbol, interval, bars_for(interval, days, warmup))
-    result = run_backtest(df, strategy, resolved, risk, interval, initial_capital)
+    result = run_backtest(df, strategy, resolved, risk, interval, initial_capital, sentiment=aligned_sentiment(df, risk))
     result["request"] = {
         "symbol": symbol,
         "interval": interval,

@@ -56,6 +56,10 @@ async function tour(browser, { label, viewport, navSelector, names }) {
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
+  // a política de segurança (CSP) não pode bloquear nada do próprio app
+  page.on("console", (msg) => {
+    if (msg.type() === "error" && /Content Security Policy|Refused to (load|execute|apply)/i.test(msg.text())) errors.push(`CSP: ${msg.text()}`);
+  });
   await login(page);
   const botName = await ensureBot(page);
   await assertHealthy(page, errors, `${label} painel`);
@@ -97,7 +101,14 @@ async function tour(browser, { label, viewport, navSelector, names }) {
   await assertHealthy(page, errors, `${label} laboratório / perfil`);
 
   await go("ai", "Análise com IA");
+  for (const tab of ["Piloto automático", "Notícias e sentimento", "Conversa"]) {
+    await page.locator('nav[aria-label="Seções da IA"]').getByRole("link", { name: tab, exact: true }).click();
+    await page.waitForTimeout(800);
+    await assertHealthy(page, errors, `${label} IA / ${tab}`);
+  }
   await go("settings", "Configurações");
+  await page.getByText("Segurança da conta").first().waitFor({ timeout: 15000 });
+  await assertHealthy(page, errors, `${label} configurações / segurança`);
   await go("dashboard", "Painel");
 
   // troca rápida entre telas e voltar/avançar do navegador

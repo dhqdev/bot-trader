@@ -113,7 +113,7 @@ def test_invalid_tool_input_is_reported(fake_anthropic, monkeypatch):
 def test_chat_endpoint_streams_and_saves_report(fake_anthropic, fresh_db):
     with TestClient(app) as client:
         assert client.post("/api/auth/register", json={"email": "ai@test.dev", "password": "12345678"}).status_code == 200
-        assert client.put("/api/settings/anthropic", json={"api_key": "sk-ant-test-123456"}).status_code == 200
+        assert client.put("/api/settings/anthropic", json={"api_key": "sk-ant-test-123456", "password": "12345678"}).status_code == 200
         with client.stream("POST", "/api/ai/chat", json={"messages": [{"role": "user", "content": "Resumo?"}], "save_report": True}) as r:
             body = "".join(r.iter_text())
         events = [json.loads(line[6:]) for line in body.splitlines() if line.startswith("data: ")]
