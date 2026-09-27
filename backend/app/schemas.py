@@ -57,6 +57,19 @@ class AnthropicKeyIn(StepUpIn):
     api_key: str = Field(min_length=10, max_length=512)
 
 
+class OpenAIKeyIn(StepUpIn):
+    api_key: str = Field(min_length=10, max_length=512)
+    model: str = Field("", max_length=64, pattern=r"^[A-Za-z0-9._:-]*$")
+
+
+class OpenAIModelIn(BaseModel):
+    model: str = Field(min_length=2, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+
+
+class AIProviderIn(BaseModel):
+    provider: Literal["anthropic", "openai"]
+
+
 class EngineIn(BaseModel):
     enabled: bool
 

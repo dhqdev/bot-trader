@@ -15,7 +15,7 @@ from app.deps import get_current_user, get_user_bot
 from app.models import AIInsight, Bot, OptimizationRun, User, utcnow
 from app.schemas import StepUpIn
 from app.services import optimizer
-from app.services.ai import resolve_api_key
+from app.services.llm import AIConfig, resolve_ai
 
 router = APIRouter(prefix="/autopilot", tags=["autopilot"])
 
@@ -26,9 +26,9 @@ class AutopilotIn(StepUpIn):
     allow_strategy_change: bool = True
 
 
-def launch(run_id: int, api_key: str | None) -> None:
+def launch(run_id: int, ai: AIConfig | None) -> None:
     """Roda o ciclo em segundo plano (os testes trocam por execução direta)."""
-    threading.Thread(target=optimizer.execute, args=(run_id, api_key), daemon=True, name=f"optimize-{run_id}").start()
+    threading.Thread(target=optimizer.execute, args=(run_id, ai), daemon=True, name=f"optimize-{run_id}").start()
 
 
 def _bot_brief(bot: Bot) -> dict:
@@ -68,7 +68,8 @@ def overview(user: User = Depends(get_current_user), db: Session = Depends(get_d
             }
         )
     db.commit()
-    return {"bots": items, "ai_configured": bool(resolve_api_key(user.id)), "modes": optimizer.MODE_LABELS}
+    ai = resolve_ai(user.id)
+    return {"bots": items, "ai_configured": ai is not None, "ai_label": ai.label if ai else None, "modes": optimizer.MODE_LABELS}
 
 
 @router.get("/bots/{bot_id}")
@@ -114,7 +115,7 @@ def run_now(bot: Bot = Depends(get_user_bot), user: User = Depends(get_current_u
     optimizer.get_autopilot(db, bot)
     run = optimizer.start_run(db, bot, "manual")
     db.commit()
-    launch(run.id, resolve_api_key(user.id))
+    launch(run.id, resolve_ai(user.id))
     return optimizer.run_view(run)
 
 

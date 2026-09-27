@@ -25,6 +25,10 @@ services:
       - BT_AI_MODEL=claude-opus-5            # conversa, análises e piloto automático
       - BT_AI_FAST_MODEL=claude-haiku-4-5    # classificação das notícias (muitas chamadas pequenas)
       # - BT_ANTHROPIC_API_KEY=sk-ant-...
+      # GPT (OpenAI) como alternativa ao Claude; a chave e o modelo também podem ser escolhidos na tela
+      - BT_OPENAI_MODEL=gpt-6-sol
+      - BT_OPENAI_FAST_MODEL=gpt-6-luna
+      # - BT_OPENAI_API_KEY=sk-...
 
       # --- Tarefas em segundo plano: notícias, medo e ganância, piloto automático ---
       - BT_SCHEDULER_ENABLED=true

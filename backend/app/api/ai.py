@@ -5,33 +5,36 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.db import get_db, session_scope
 from app.deps import get_current_user
 from app.models import AIReport, User
 from app.schemas import ChatIn
-from app.services.ai import chat_stream, resolve_api_key
+from app.services.ai import stream_chat
+from app.services.llm import resolve_ai
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
 @router.get("/status")
 def ai_status(user: User = Depends(get_current_user)):
-    return {"configured": bool(resolve_api_key(user.id)), "model": get_settings().ai_model}
+    ai = resolve_ai(user.id)
+    if ai is None:
+        return {"configured": False, "provider": None, "provider_label": None, "model": None}
+    return {"configured": True, "provider": ai.provider, "provider_label": ai.label, "model": ai.model}
 
 
 @router.post("/chat")
 async def chat(body: ChatIn, user: User = Depends(get_current_user)):
-    api_key = resolve_api_key(user.id)
-    if not api_key:
-        raise HTTPException(400, "Configure a chave da Anthropic em Configurações para usar a IA.")
+    ai = resolve_ai(user.id)
+    if ai is None:
+        raise HTTPException(400, "Cadastre uma chave de IA (Claude ou GPT) em Configurações para usar a análise.")
     user_id = user.id
     messages = [m.model_dump() for m in body.messages]
 
     async def events():
         answer: list[str] = []
         model = ""
-        async for event in chat_stream(user_id, api_key, messages, body.context.bot_id, body.context.backtest):
+        async for event in stream_chat(ai, user_id, messages, body.context.bot_id, body.context.backtest):
             if event["type"] == "text":
                 answer.append(event["text"])
             if event["type"] == "done":

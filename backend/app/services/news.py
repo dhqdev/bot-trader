@@ -21,17 +21,16 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-import anthropic
 import httpx
 from defusedxml import ElementTree as SafeET
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import case, delete, select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.db import session_scope
 from app.kv import get_kv, set_kv
 from app.models import Bot, NewsItem, utcnow
+from app.services.llm import AIConfig, AIError, structured
 
 log = logging.getLogger("bot_trader.news")
 
@@ -401,10 +400,8 @@ def apply_classification(db: Session, items: list[NewsItem], raw: dict) -> int:
     return done
 
 
-def classify_with_ai(api_key: str, batch_size: int = 25, max_batches: int = 2, client=None) -> int:
-    """Reclassifica com IA as notícias das últimas 48 h ainda não revisadas."""
-    settings = get_settings()
-    client = client or anthropic.Anthropic(api_key=api_key)
+def classify_with_ai(ai: AIConfig, batch_size: int = 25, max_batches: int = 2, client=None) -> int:
+    """Reclassifica com IA (Claude ou GPT) as notícias das últimas 48 h ainda não revisadas."""
     total = 0
     for _ in range(max_batches):
         with session_scope() as db:
@@ -417,27 +414,25 @@ def classify_with_ai(api_key: str, batch_size: int = 25, max_batches: int = 2, c
                     .limit(batch_size)
                 )
             )
-            if not items:
-                break
-            response = client.messages.create(
-                model=settings.ai_fast_model,
-                max_tokens=8000,
-                system=CLASSIFY_SYSTEM,
-                messages=[{"role": "user", "content": _news_payload(items)}],
-                output_config={"format": {"type": "json_schema", "schema": CLASSIFY_SCHEMA}},
-            )
-            if response.stop_reason in ("refusal", "max_tokens"):
-                log.warning("Classificação de notícias interrompida (%s)", response.stop_reason)
-                for n in items:  # não tenta de novo para sempre o mesmo lote
-                    n.classified_by = "keywords*"
-                continue
-            text = next((b.text for b in response.content if b.type == "text"), "{}")
-            done = apply_classification(db, items, json.loads(text))
-            for n in items:
+            ids = [n.id for n in items]
+            payload = _news_payload(items)
+        if not ids:
+            break
+        # a chamada à IA acontece fora da sessão do banco (pode levar alguns segundos)
+        try:
+            data, model = structured(ai, CLASSIFY_SYSTEM, payload, CLASSIFY_SCHEMA, "classificacao_noticias", 8000, fast=True, client=client)
+        except (AIError, json.JSONDecodeError) as exc:
+            log.warning("Classificação de notícias interrompida: %s", exc)
+            data, model = None, ""
+        with session_scope() as db:
+            items = list(db.scalars(select(NewsItem).where(NewsItem.id.in_(ids))))
+            done = apply_classification(db, items, data) if data else 0
+            for n in items:  # o que a IA não devolveu não volta para a fila
                 if n.classified_by != "ai":
                     n.classified_by = "keywords*"
             total += done
-            set_kv(db, "news_last_ai", {"at": utcnow().isoformat(), "classified": done, "model": settings.ai_fast_model})
+            if data:
+                set_kv(db, "news_last_ai", {"at": utcnow().isoformat(), "classified": done, "model": model, "provider": ai.label})
     return total
 
 

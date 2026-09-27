@@ -1,4 +1,4 @@
-"""Analista de IA (Claude) com ferramentas somente-leitura.
+"""Analista de IA (Claude ou GPT) com ferramentas somente-leitura.
 
 A IA consulta o portfólio, os bots, o mercado e roda backtests para
 embasar as respostas. Ela NÃO envia ordens nem altera configurações:
@@ -11,6 +11,7 @@ import logging
 from typing import AsyncIterator, Literal
 
 import anthropic
+import openai
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 
@@ -19,9 +20,9 @@ from app.core.exchange import INTERVAL_MINUTES
 from app.core.risk import RiskConfig
 from app.core.strategies import STRATEGIES
 from app.db import session_scope
-from app.models import AIInsight, Bot, BotEvent, Credential, OptimizationRun, Position
-from app.security import decrypt
+from app.models import AIInsight, Bot, BotEvent, OptimizationRun, Position
 from app.services import backtesting, market_analysis, stats
+from app.services.llm import AIConfig, error_message
 
 log = logging.getLogger("bot_trader.ai")
 
@@ -335,26 +336,6 @@ TOOL_LABELS = {
 # Chave e contexto
 
 
-def resolve_api_key(user_id: int) -> str | None:
-    with session_scope() as db:
-        cred = db.scalar(select(Credential).where(Credential.user_id == user_id, Credential.provider == "anthropic"))
-        if cred:
-            return decrypt(cred.key_enc)
-    return get_settings().anthropic_api_key or None
-
-
-def any_api_key() -> str | None:
-    """Chave para tarefas globais (classificar notícias): a do servidor ou a do dono do sistema."""
-    if get_settings().anthropic_api_key:
-        return get_settings().anthropic_api_key
-    with session_scope() as db:
-        cred = db.scalar(select(Credential).where(Credential.provider == "anthropic").order_by(Credential.user_id))
-        if cred:
-            try:
-                return decrypt(cred.key_enc)
-            except ValueError:
-                return None
-    return None
 
 
 def _context_block(user_id: int, bot_id: int | None, backtest: dict | None) -> str:
@@ -475,3 +456,84 @@ async def chat_stream(user_id: int, api_key: str, messages: list[dict], bot_id: 
         convo.append({"role": "user", "content": results})
 
     yield {"type": "error", "message": "A análise excedeu o limite de etapas."}
+
+
+# ---------------------------------------------------------------------------
+# GPT (OpenAI): mesmo agente, pela Responses API
+
+
+def openai_tools() -> list[dict]:
+    """As mesmas ferramentas, no formato de funções da OpenAI (esquema livre: campos opcionais têm padrão)."""
+    return [
+        {"type": "function", "name": t["name"], "description": t["description"], "parameters": t["input_schema"], "strict": False}
+        for t in TOOLS
+    ]
+
+
+async def chat_stream_openai(user_id: int, ai: AIConfig, messages: list[dict], bot_id: int | None, backtest: dict | None) -> AsyncIterator[dict]:
+    client = openai.AsyncOpenAI(api_key=ai.api_key)
+    context = await asyncio.to_thread(_context_block, user_id, bot_id, backtest)
+    instructions = SYSTEM_PROMPT + (f"\n\n{context}" if context else "")
+    tools = openai_tools()
+    next_input: list = [{"role": m["role"], "content": m["content"]} for m in messages]
+    previous_id: str | None = None
+
+    for _ in range(MAX_STEPS):
+        yield {"type": "status", "text": "Pensando…"}
+        kwargs: dict = {"model": ai.model, "instructions": instructions, "input": next_input, "tools": tools, "max_output_tokens": 32000}
+        if previous_id:
+            kwargs["previous_response_id"] = previous_id  # a OpenAI guarda o raciocínio e as chamadas anteriores
+        try:
+            async with client.responses.stream(**kwargs) as stream:
+                async for event in stream:
+                    if event.type == "response.output_text.delta":
+                        yield {"type": "text", "text": event.delta}
+                response = await stream.get_final_response()
+        except (openai.APIError, anthropic.APIError) as exc:
+            yield {"type": "error", "message": error_message(exc, ai)}
+            return
+        except RuntimeError:
+            yield {"type": "error", "message": "A resposta foi interrompida (limite de tamanho ou erro na OpenAI). Tente uma pergunta mais específica."}
+            return
+
+        output = list(getattr(response, "output", None) or [])
+        calls = [item for item in output if getattr(item, "type", "") == "function_call"]
+        refused = any(
+            getattr(part, "type", "") == "refusal" for item in output if getattr(item, "type", "") == "message" for part in (item.content or [])
+        )
+        if not calls:
+            if refused:
+                yield {"type": "error", "message": "A IA recusou esta solicitação. Tente reformular a pergunta."}
+            else:
+                yield {"type": "done", "model": response.model}
+            return
+
+        previous_id = response.id
+        next_input = []
+        for call in calls:
+            try:
+                args = json.loads(call.arguments or "{}")
+            except json.JSONDecodeError:
+                args = None
+            yield {"type": "tool", "name": call.name, "label": TOOL_LABELS.get(call.name, call.name), "input": args}
+            try:
+                if not isinstance(args, dict):
+                    raise ValueError("entrada da ferramenta não é um objeto JSON válido")
+                result = await asyncio.to_thread(_run_tool, user_id, call.name, args)
+                content, ok = json.dumps(result, ensure_ascii=False, default=str), True
+            except ValidationError as exc:
+                content, ok = json.dumps({"INVALID_INPUT": exc.errors(include_url=False)}, default=str), False
+            except Exception as exc:
+                log.warning("Ferramenta %s falhou: %s", call.name, exc)
+                content, ok = f"Erro: {exc}", False
+            yield {"type": "tool_done", "name": call.name, "ok": ok}
+            next_input.append({"type": "function_call_output", "call_id": call.call_id, "output": content})
+
+    yield {"type": "error", "message": "A análise excedeu o limite de etapas."}
+
+
+def stream_chat(ai: AIConfig, user_id: int, messages: list[dict], bot_id: int | None, backtest: dict | None) -> AsyncIterator[dict]:
+    """Conversa com o provedor escolhido pelo usuário."""
+    if ai.provider == "openai":
+        return chat_stream_openai(user_id, ai, messages, bot_id, backtest)
+    return chat_stream(user_id, ai.api_key, messages, bot_id, backtest)

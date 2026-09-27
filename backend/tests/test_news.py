@@ -15,6 +15,10 @@ from app.db import session_scope
 from app.models import Bot, BotEvent, NewsItem, Position, User, utcnow
 from app.security import hash_password
 from app.services import news
+from app.services.llm import AIConfig
+
+CLAUDE = AIConfig("anthropic", "sk-test", "claude-opus-5", "claude-haiku-4-5")
+GPT = AIConfig("openai", "sk-test", "gpt-6-sol", "gpt-6-luna")
 
 from .conftest import FakeMarket
 from .test_engine import scripted  # noqa: F401  (fixture)
@@ -125,7 +129,7 @@ def test_ai_classification_validates_output(clean_news):
         {"id": 999999, "assets": ["BTC"], "sentiment": 1, "impact": "low", "category": "other", "summary_pt": "não existe"},
     ]}  # fmt: skip
     client = FakeAI(reply)
-    assert news.classify_with_ai("sk-test", client=client) == 1
+    assert news.classify_with_ai(CLAUDE, client=client) == 1
     prompt = client.calls[0]["messages"][0]["content"]
     assert "<noticias>" in prompt and "Rumor sobre SOL" in prompt
     assert client.calls[0]["output_config"]["format"]["type"] == "json_schema"
@@ -134,7 +138,7 @@ def test_ai_classification_validates_output(clean_news):
         assert item_a.assets == ["SOL", "MARKET"] and item_a.sentiment == -1.0 and item_a.classified_by == "ai"
         assert item_a.ai_summary == "Hack na rede"
         assert item_b.classified_by == "keywords*"  # não volta para a fila
-    assert news.classify_with_ai("sk-test", client=client) == 0  # nada pendente: não chama a IA de novo
+    assert news.classify_with_ai(CLAUDE, client=client) == 0  # nada pendente: não chama a IA de novo
     assert len(client.calls) == 1
 
 
@@ -214,3 +218,29 @@ def test_engine_exits_on_confirmed_bad_news(scripted, clean_news):  # noqa: F811
         pos = db.scalar(select(Position).where(Position.bot_id == bot_id))
         assert pos.status == "closed" and pos.exit_reason == "news"
 
+
+
+class FakeOpenAI:
+    """Responses API falsa: devolve o JSON pedido pelo esquema."""
+
+    def __init__(self, reply: dict):
+        self.reply = reply
+        self.calls = []
+        self.responses = SimpleNamespace(create=self._create)
+
+    def _create(self, **kwargs):
+        self.calls.append(kwargs)
+        return SimpleNamespace(status="completed", model=kwargs["model"], output=[], output_text=json.dumps(self.reply))
+
+
+def test_gpt_classifies_news_with_strict_schema(clean_news):
+    a = _add_news("Hack em ponte da Solana", ["SOL"], 0.0, "low")
+    client = FakeOpenAI({"items": [{"id": a, "assets": ["SOL"], "sentiment": -0.9, "impact": "high", "category": "security", "summary_pt": "Hack"}]})
+    assert news.classify_with_ai(GPT, client=client) == 1
+    call = client.calls[0]
+    assert call["model"] == "gpt-6-luna"  # modelo barato para o volume de notícias
+    assert call["text"]["format"]["type"] == "json_schema" and call["text"]["format"]["strict"] is True
+    assert "<noticias>" in call["input"] and call["store"] is False
+    with session_scope() as db:
+        item = db.get(NewsItem, a)
+        assert item.classified_by == "ai" and item.impact == "high" and item.sentiment == -0.9

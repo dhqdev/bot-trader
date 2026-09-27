@@ -24,6 +24,9 @@ services:
       BT_AI_MODEL: ${BT_AI_MODEL:-claude-opus-5}
       BT_AI_FAST_MODEL: ${BT_AI_FAST_MODEL:-claude-haiku-4-5}
       BT_ANTHROPIC_API_KEY: ${BT_ANTHROPIC_API_KEY:-}
+      BT_OPENAI_MODEL: ${BT_OPENAI_MODEL:-gpt-6-sol}
+      BT_OPENAI_FAST_MODEL: ${BT_OPENAI_FAST_MODEL:-gpt-6-luna}
+      BT_OPENAI_API_KEY: ${BT_OPENAI_API_KEY:-}
       BT_SCHEDULER_ENABLED: ${BT_SCHEDULER_ENABLED:-true}
       BT_NEWS_ENABLED: ${BT_NEWS_ENABLED:-true}
     ports:

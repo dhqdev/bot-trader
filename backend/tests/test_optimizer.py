@@ -14,6 +14,10 @@ from app.main import app
 from app.models import AIInsight, AutopilotConfig, Bot, BotEvent, OptimizationRun, User
 from app.security import hash_password
 from app.services import backtesting, optimizer
+from app.services.llm import AIConfig
+
+CLAUDE = AIConfig("anthropic", "sk-test", "claude-opus-5", "claude-haiku-4-5")
+GPT = AIConfig("openai", "sk-test", "gpt-6-sol", "gpt-6-luna")
 
 from .conftest import make_ohlcv
 
@@ -97,11 +101,11 @@ def controlled(monkeypatch):
     return SCORES
 
 
-def _run(bot_id: int, api_key=None, client=None) -> OptimizationRun:
+def _run(bot_id: int, ai=None, client=None) -> OptimizationRun:
     with session_scope() as db:
         run = optimizer.start_run(db, db.get(Bot, bot_id), "manual")
         run_id = run.id
-    optimizer.execute(run_id, api_key, client)
+    optimizer.execute(run_id, ai, client)
     with session_scope() as db:
         return db.get(OptimizationRun, run_id)
 
@@ -180,7 +184,7 @@ def test_ai_analyst_learns_and_its_idea_can_win(controlled):
     SCORES["ai:combo"] = {"in": 10, "out": 10, "full": 10}
     client = FakeAnalyst()
     bot_id = _bot(autopilot="suggest")
-    run = _run(bot_id, api_key="sk-test", client=client)
+    run = _run(bot_id, ai=CLAUDE, client=client)
     assert run.status == "suggested" and run.candidate["key"] == "ai:combo" and run.candidate["source"] == "ai"
     assert run.ai_notes.startswith("## Resumo") and run.ai_model == "claude-opus-5"
     sent = client.calls[0]["messages"][0]["content"]
@@ -190,7 +194,7 @@ def test_ai_analyst_learns_and_its_idea_can_win(controlled):
         lessons = [i.text for i in db.scalars(select(AIInsight).where(AIInsight.bot_id == bot_id))]
     assert lessons == ["Em SOLUSDT 4h o trailing protegeu as altas."]
     # no ciclo seguinte a IA recebe as lições anteriores
-    _run(bot_id, api_key="sk-test", client=client)
+    _run(bot_id, ai=CLAUDE, client=client)
     assert "trailing protegeu as altas" in client.calls[-1]["messages"][0]["content"]
 
 
@@ -209,7 +213,7 @@ def test_real_pipeline_runs_on_synthetic_data(monkeypatch):
 
 @pytest.fixture
 def api(fresh_db, controlled, monkeypatch):
-    monkeypatch.setattr(autopilot_api, "launch", lambda run_id, key: optimizer.execute(run_id, key))
+    monkeypatch.setattr(autopilot_api, "launch", lambda run_id, ai: optimizer.execute(run_id, ai))
     with TestClient(app) as c:
         assert c.post("/api/auth/register", json={"email": EMAIL, "password": PASSWORD}).status_code == 200
         yield c
@@ -241,3 +245,24 @@ def test_autopilot_api(api):
     assert api.post(f"/api/autopilot/runs/{run2['id']}/reject").json()["status"] == "rejected"
     assert len(api.get(f"/api/autopilot/runs?bot_id={bot_id}").json()) == 2
     assert api.get("/api/autopilot/runs/999999").status_code == 404
+
+
+class FakeGPTAnalyst:
+    def __init__(self):
+        self.calls = []
+        self.responses = SimpleNamespace(create=self._create)
+
+    def _create(self, **kwargs):
+        self.calls.append(kwargs)
+        reply = {"analysis_md": "Análise do GPT.", "insights": [{"kind": "warning", "text": "Mercado lateral: menos sinais."}], "proposals": []}
+        return SimpleNamespace(status="completed", model=kwargs["model"], output=[], output_text=json.dumps(reply))
+
+
+def test_gpt_can_be_the_analyst(controlled):
+    client = FakeGPTAnalyst()
+    bot_id = _bot(autopilot="suggest")
+    run = _run(bot_id, ai=GPT, client=client)
+    assert run.ai_model == "gpt-6-sol" and run.ai_notes == "Análise do GPT."
+    assert client.calls[0]["text"]["format"]["name"] == "analise_piloto"
+    with session_scope() as db:
+        assert [i.text for i in db.scalars(select(AIInsight).where(AIInsight.bot_id == bot_id))] == ["Mercado lateral: menos sinais."]

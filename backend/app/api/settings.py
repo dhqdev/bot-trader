@@ -10,8 +10,9 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.kv import get_kv, set_kv
 from app.models import Bot, Credential, User, utcnow
-from app.schemas import AnthropicKeyIn, BinanceKeysIn
+from app.schemas import AIProviderIn, AnthropicKeyIn, BinanceKeysIn, OpenAIKeyIn, OpenAIModelIn
 from app.security import decrypt, encrypt, mask
+from app.services import llm
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -54,12 +55,27 @@ def _perm_key(user_id: int) -> str:
     return f"binance_key_check:{user_id}"
 
 
+def _ai_view(db: Session, user: User, provider: str) -> dict:
+    settings = get_settings()
+    cred = _get(db, user.id, provider)
+    env_key = bool(settings.anthropic_api_key if provider == "anthropic" else settings.openai_api_key)
+    view = {
+        "configured": cred is not None or env_key,
+        "api_key": _masked(cred) if cred else ("(variável de ambiente)" if env_key else None),
+        "source": "db" if cred else ("env" if env_key else None),
+    }
+    if provider == "anthropic":
+        view["model"] = settings.ai_model
+    else:
+        view.update(model=llm.openai_model(db, user.id), fast_model=settings.openai_fast_model, models=llm.OPENAI_MODELS)
+    return view
+
+
 @router.get("/credentials")
 def credentials(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     binance = _get(db, user.id, "binance")
-    anthropic = _get(db, user.id, "anthropic")
-    env_key = bool(get_settings().anthropic_api_key)
     check = get_kv(db, _perm_key(user.id)) if binance else None
+    active = llm.active_provider(db, user.id)
     return {
         "binance": {
             "configured": binance is not None,
@@ -70,12 +86,9 @@ def credentials(user: User = Depends(get_current_user), db: Session = Depends(ge
             "warnings": (check or {}).get("warnings", []),
             "checked_at": (check or {}).get("checked_at"),
         },
-        "anthropic": {
-            "configured": anthropic is not None or env_key,
-            "api_key": _masked(anthropic) if anthropic else ("(variável de ambiente)" if env_key else None),
-            "source": "db" if anthropic else ("env" if env_key else None),
-            "model": get_settings().ai_model,
-        },
+        "anthropic": _ai_view(db, user, "anthropic"),
+        "openai": _ai_view(db, user, "openai"),
+        "ai": {"active": active, "active_label": llm.PROVIDER_LABELS.get(active) if active else None, "labels": llm.PROVIDER_LABELS},
     }
 
 
@@ -144,6 +157,7 @@ def save_anthropic(body: AnthropicKeyIn, request: Request, user: User = Depends(
     cred = _get(db, user.id, "anthropic") or Credential(user_id=user.id, provider="anthropic")
     cred.key_enc = encrypt(body.api_key.strip())
     db.add(cred)
+    set_kv(db, llm.pref_key(user.id), "anthropic")  # a chave mais recente passa a ser a usada
     audit(db, user.id, "anthropic_key_saved", request)
     db.commit()
     return {"ok": True}
@@ -157,4 +171,61 @@ def delete_anthropic(request: Request, user: User = Depends(get_current_user), d
         audit(db, user.id, "anthropic_key_removed", request)
         db.commit()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- GPT (OpenAI)
+
+
+@router.put("/openai")
+def save_openai(body: OpenAIKeyIn, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_step_up(db, user, body.password, body.code, request, "cadastrar chave da OpenAI")
+    key = body.api_key.strip()
+    model = body.model or llm.openai_model(db, user.id)
+    try:
+        llm.check_openai_key(key, model)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    cred = _get(db, user.id, "openai") or Credential(user_id=user.id, provider="openai")
+    cred.key_enc = encrypt(key)
+    db.add(cred)
+    set_kv(db, llm.model_key(user.id), model)
+    set_kv(db, llm.pref_key(user.id), "openai")  # a chave mais recente passa a ser a usada
+    audit(db, user.id, "openai_key_saved", request, model)
+    db.commit()
+    return {"ok": True, "model": model}
+
+
+@router.put("/openai/model")
+def set_openai_model(body: OpenAIModelIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    keys = llm.user_keys(db, user.id)
+    if "openai" not in keys:
+        raise HTTPException(400, "Cadastre a chave da OpenAI primeiro.")
+    try:
+        llm.check_openai_key(keys["openai"], body.model)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    set_kv(db, llm.model_key(user.id), body.model)
+    db.commit()
+    return {"ok": True, "model": body.model}
+
+
+@router.delete("/openai")
+def delete_openai(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    cred = _get(db, user.id, "openai")
+    if cred:
+        db.delete(cred)
+        audit(db, user.id, "openai_key_removed", request)
+        db.commit()
+    return {"ok": True}
+
+
+@router.put("/ai-provider")
+def choose_ai(body: AIProviderIn, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Qual IA o sistema usa (conversa, notícias e piloto automático) quando as duas chaves existem."""
+    if body.provider not in llm.user_keys(db, user.id):
+        raise HTTPException(400, f"Cadastre a chave da {llm.PROVIDER_LABELS[body.provider]} primeiro.")
+    set_kv(db, llm.pref_key(user.id), body.provider)
+    audit(db, user.id, "ai_provider_changed", request, llm.PROVIDER_LABELS[body.provider])
+    db.commit()
+    return {"ok": True, "active": body.provider}
 

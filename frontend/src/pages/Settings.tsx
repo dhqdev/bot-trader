@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Copy, Download, KeyRound, LogOut, ShieldAlert, ShieldCheck, Smartphone, XCircle } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Badge, Button, Card, ErrorBox, Field, Input, Loading, Modal, PageHeader, Switch } from "../components/ui";
+import { Badge, Button, Card, ErrorBox, Field, Input, Loading, Modal, PageHeader, Segmented, Select, Switch } from "../components/ui";
 import { api } from "../lib/api";
 import { dateTime, num, timeAgo } from "../lib/format";
 import { APP_VERSION, isIOS, isStandalone, useInstallPrompt } from "../lib/pwa";
-import type { Credentials, KeyPermissions, SecurityEvent, SecurityStatus, TwoFactorSetup } from "../lib/types";
+import type { AIProvider, Credentials, KeyPermissions, SecurityEvent, SecurityStatus, TwoFactorSetup } from "../lib/types";
 
 interface TestResult {
   ok: boolean;
@@ -178,6 +178,110 @@ function BinanceCard({ creds, twoFactor }: { creds: Credentials["binance"]; twoF
           Na Binance, crie a chave com <strong className="text-ink">leitura e Spot Trading</strong>, <strong className="text-ink">sem saque</strong>, e restrinja ao IP do servidor.
           O sistema confere as permissões na Binance e <strong className="text-ink">recusa chaves com saque liberado</strong>. As chaves ficam criptografadas no banco.
         </div>
+      </div>
+    </Card>
+  );
+}
+
+function useInvalidateAI() {
+  const qc = useQueryClient();
+  return () => {
+    for (const key of ["credentials", "ai-status", "autopilot", "security-events"]) qc.invalidateQueries({ queryKey: [key] });
+  };
+}
+
+/** Qual IA o sistema usa quando as duas chaves estão cadastradas. */
+function AIProviderCard({ creds }: { creds: Credentials }) {
+  const invalidate = useInvalidateAI();
+  const choose = useMutation({ mutationFn: (provider: AIProvider) => api.put("/settings/ai-provider", { provider }), onSuccess: invalidate });
+  const both = creds.anthropic.configured && creds.openai.configured;
+  return (
+    <Card title="Inteligência artificial" action={creds.ai.active ? <Badge tone="good"><CheckCircle2 className="size-3" />{creds.ai.active_label}</Badge> : <Badge>Nenhuma</Badge>}>
+      <div className="space-y-3 text-sm text-ink-2">
+        {creds.ai.active ? (
+          <p>
+            Em uso: <strong className="text-ink">{creds.ai.active_label}</strong>, na conversa, na leitura das notícias e no piloto automático.
+          </p>
+        ) : (
+          <p>Cadastre a chave do <strong className="text-ink">Claude</strong> (Anthropic) ou do <strong className="text-ink">GPT</strong> (OpenAI) abaixo para ligar a análise com IA. Pode ser qualquer uma das duas, ou as duas.</p>
+        )}
+        {both && creds.ai.active && (
+          <div className="flex flex-wrap items-center gap-3">
+            <Segmented<AIProvider>
+              value={creds.ai.active}
+              onChange={(p) => choose.mutate(p)}
+              options={[
+                { value: "anthropic", label: "Claude" },
+                { value: "openai", label: "GPT" },
+              ]}
+            />
+            {choose.isPending && <span className="text-xs text-muted">Trocando…</span>}
+          </div>
+        )}
+        {!both && creds.ai.active && <p className="text-xs text-muted">Cadastre também a outra chave se quiser poder alternar entre as duas.</p>}
+        <ErrorBox error={choose.error} />
+      </div>
+    </Card>
+  );
+}
+
+function OpenAICard({ creds, twoFactor }: { creds: Credentials["openai"]; twoFactor: boolean }) {
+  const invalidate = useInvalidateAI();
+  const [key, setKey] = useState("");
+  const [model, setModel] = useState(creds.model);
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const save = useMutation({
+    mutationFn: () => api.put("/settings/openai", { api_key: key, model, password, code: code || null }),
+    onSuccess: () => {
+      setKey("");
+      setPassword("");
+      setCode("");
+      invalidate();
+    },
+  });
+  const changeModel = useMutation({ mutationFn: (m: string) => api.put("/settings/openai/model", { model: m }), onSuccess: invalidate });
+  const remove = useMutation({ mutationFn: () => api.del("/settings/openai"), onSuccess: invalidate });
+  const current = creds.configured ? creds.model : model;
+  const options = creds.models.some((m) => m.id === current) ? creds.models : [...creds.models, { id: current, label: current }];
+  return (
+    <Card title="IA (OpenAI GPT)" action={creds.configured ? <Badge tone="good"><CheckCircle2 className="size-3" />Configurada</Badge> : <Badge>Não configurada</Badge>}>
+      <div className="space-y-3">
+        {creds.configured && (
+          <div className="text-sm">
+            <div className="text-ink-2">Chave</div>
+            <div className="font-mono text-ink">{creds.api_key}</div>
+            {creds.source === "env" && <div className="mt-1 text-xs text-muted">Definida por variável de ambiente</div>}
+          </div>
+        )}
+        <Field label="Modelo" help={`As notícias usam o ${creds.fast_model}, mais barato, porque são muitas chamadas pequenas.`}>
+          <Select value={current} onChange={(e) => (creds.configured ? changeModel.mutate(e.target.value) : setModel(e.target.value))} disabled={changeModel.isPending}>
+            {options.map((m) => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </Select>
+        </Field>
+        <ErrorBox error={changeModel.error} />
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save.mutate();
+          }}
+        >
+          <Field label={creds.configured ? "Nova chave" : "Chave da API"}>
+            <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-…" required autoComplete="off" />
+          </Field>
+          {key && <StepUpFields password={password} code={code} onPassword={setPassword} onCode={setCode} twoFactor={twoFactor} />}
+          <div className="flex gap-2">
+            <Button type="submit" variant="primary" loading={save.isPending}>Validar e salvar</Button>
+            {creds.source === "db" && <Button type="button" variant="danger" onClick={() => remove.mutate()} loading={remove.isPending}>Remover</Button>}
+          </div>
+        </form>
+        <ErrorBox error={save.error ?? remove.error} />
+        <p className="text-xs text-muted">
+          Crie a chave em platform.openai.com → API keys (a conta precisa ter créditos). Ao salvar, o sistema confere a chave e o modelo na OpenAI; essa consulta não gasta créditos.
+        </p>
       </div>
     </Card>
   );
@@ -613,10 +717,12 @@ export function SettingsPage() {
           <div className="space-y-4">
             <BinanceCard creds={data.binance} twoFactor={twoFactor} />
             {security.data && <SecurityCard status={security.data} />}
+            <PasswordCard />
           </div>
           <div className="space-y-4">
+            <AIProviderCard creds={data} />
             <AnthropicCard creds={data.anthropic} twoFactor={twoFactor} />
-            <PasswordCard />
+            <OpenAICard creds={data.openai} twoFactor={twoFactor} />
             <ActivityCard />
             <InstallCard />
           </div>

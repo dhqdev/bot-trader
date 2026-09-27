@@ -35,6 +35,9 @@ EVENT_LABELS = {
     "binance_keys_removed": "Chaves da Binance removidas",
     "anthropic_key_saved": "Chave da Anthropic cadastrada",
     "anthropic_key_removed": "Chave da Anthropic removida",
+    "openai_key_saved": "Chave da OpenAI cadastrada",
+    "openai_key_removed": "Chave da OpenAI removida",
+    "ai_provider_changed": "IA usada pelo sistema alterada",
     "autopilot_live": "Piloto automático autorizado a mexer em bots reais",
 }
 

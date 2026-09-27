@@ -121,7 +121,7 @@ function SourcesCard({ status, onRefresh, refreshing, error }: { status: NewsSta
         {status?.last_ai ? (
           <p className="flex gap-1.5 text-xs text-ink-2"><Sparkles className="mt-0.5 size-3.5 shrink-0 text-accent" />Classificadas pela IA ({status.last_ai.model}) {timeAgo(status.last_ai.at)}.</p>
         ) : (
-          <p className="text-xs text-muted">Sem a chave da Anthropic, a classificação é só por palavras-chave (menos precisa). Para travar compras, a mesma notícia grave precisa aparecer em duas fontes.</p>
+          <p className="text-xs text-muted">Sem uma chave de IA (Claude ou GPT), a classificação é só por palavras-chave (menos precisa). Para travar compras, a mesma notícia grave precisa aparecer em duas fontes.</p>
         )}
         {errors.length > 0 && (
           <ul className="space-y-0.5 text-xs text-warn-text">

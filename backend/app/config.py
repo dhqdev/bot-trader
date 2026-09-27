@@ -32,9 +32,14 @@ class Settings(BaseSettings):
     engine_autostart: bool = True  # retoma os bots ao iniciar o servidor
     engine_poll_seconds: int = 15  # frequência de checagem de stops/preço
 
-    anthropic_api_key: str = ""  # opcional, também pode ser salva pela interface
+    # IA: Claude (Anthropic) e/ou GPT (OpenAI). As chaves também podem ser salvas pela interface,
+    # onde o usuário escolhe qual das duas o sistema usa.
+    anthropic_api_key: str = ""
     ai_model: str = "claude-opus-5"  # análises, conversa e piloto automático
     ai_fast_model: str = "claude-haiku-4-5"  # classificação das notícias (muitas chamadas pequenas)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-6-sol"  # padrão; a tela permite escolher outro modelo
+    openai_fast_model: str = "gpt-6-luna"
 
     # tarefas em segundo plano: notícias, índice de medo e ganância, piloto automático
     scheduler_enabled: bool = True

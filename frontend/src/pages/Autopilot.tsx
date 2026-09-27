@@ -504,7 +504,7 @@ function InsightsCard() {
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-muted">As lições que a IA tirar de cada ciclo aparecem aqui e são usadas nos próximos. Precisa da chave da Anthropic.</p>
+        <p className="text-sm text-muted">As lições que a IA tirar de cada ciclo aparecem aqui e são usadas nos próximos. Precisa de uma chave de IA (Claude ou GPT).</p>
       )}
     </Card>
   );
@@ -526,7 +526,7 @@ export function AutopilotPage() {
         <div className="mb-4 flex gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink-2">
           <Sparkles className="mt-0.5 size-3.5 shrink-0 text-accent" />
           <span>
-            Sem a chave da Anthropic o piloto funciona só com os testes. Com a chave (em <Link to="/settings" className="text-accent hover:underline">Configurações</Link>), a IA escreve a
+            Sem uma chave de IA (Claude ou GPT) o piloto funciona só com os testes. Com a chave (em <Link to="/settings" className="text-accent hover:underline">Configurações</Link>), a IA escreve a
             análise de cada ciclo, acumula lições e propõe ideias novas, que passam pelos mesmos testes.
           </span>
         </div>

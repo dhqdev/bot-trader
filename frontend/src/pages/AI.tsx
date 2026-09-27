@@ -9,7 +9,7 @@ import { AITabs } from "../components/aitabs";
 import { Badge, Button, Card, Empty, Modal, PageHeader, Switch } from "../components/ui";
 import { api, streamChat } from "../lib/api";
 import { dateTime } from "../lib/format";
-import type { AIReportItem, BacktestResult } from "../lib/types";
+import type { AIReportItem, AIStatus, BacktestResult } from "../lib/types";
 
 interface ToolCall {
   name: string;
@@ -77,7 +77,7 @@ export function AIPage() {
   const endRef = useRef<HTMLDivElement>(null);
   const autoSent = useRef(false);
 
-  const status = useQuery({ queryKey: ["ai-status"], queryFn: () => api.get<{ configured: boolean; model: string }>("/ai/status") });
+  const status = useQuery({ queryKey: ["ai-status"], queryFn: () => api.get<AIStatus>("/ai/status") });
   const reports = useQuery({ queryKey: ["reports"], queryFn: () => api.get<AIReportItem[]>("/ai/reports") });
   const del = useMutation({
     mutationFn: (id: number) => api.del(`/ai/reports/${id}`),
@@ -154,7 +154,7 @@ export function AIPage() {
         <AITabs />
         <Card>
           <Empty icon={<Sparkles className="size-8" />} title="Configure a IA">
-            Cadastre sua chave da API da Anthropic (Claude) em Configurações. A IA analisa seus bots, o mercado e as notícias, roda backtests para embasar as sugestões e
+            Cadastre a chave do Claude (Anthropic) ou do GPT (OpenAI) em Configurações. A IA analisa seus bots, o mercado e as notícias, roda backtests para embasar as sugestões e
             ajuda o piloto automático a melhorar as estratégias. O piloto e as notícias também funcionam sem a chave, só que sem as análises escritas.
             <div className="mt-4">
               <Button variant="primary" onClick={() => navigate("/settings")}>Ir para Configurações</Button>
@@ -167,7 +167,7 @@ export function AIPage() {
 
   return (
     <>
-      <PageHeader title="Análise com IA" subtitle={`Pergunte sobre seus bots, estratégias, notícias e o mercado. A IA consulta dados reais e roda backtests, mas não envia ordens.${status.data ? ` · ${status.data.model}` : ""}`} />
+      <PageHeader title="Análise com IA" subtitle={`Pergunte sobre seus bots, estratégias, notícias e o mercado. A IA consulta dados reais e roda backtests, mas não envia ordens.${status.data?.configured ? ` · ${status.data.provider_label}: ${status.data.model}` : ""}`} />
       <AITabs />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
         <Card padded={false} className="flex min-h-[70vh] flex-col">

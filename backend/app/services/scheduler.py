@@ -40,17 +40,17 @@ def _news() -> None:
 
 def _news_ai() -> None:
     from app.services import news
-    from app.services.ai import any_api_key
+    from app.services.llm import any_ai
 
-    key = any_api_key()
-    if key and get_settings().news_enabled:
-        news.classify_with_ai(key)
+    ai = any_ai()
+    if ai is not None and get_settings().news_enabled:
+        news.classify_with_ai(ai)
 
 
 def autopilot_tick() -> int | None:
     """Roda o ciclo do bot mais atrasado (um por vez). Devolve o id do ciclo ou None."""
     from app.services import optimizer
-    from app.services.ai import resolve_api_key
+    from app.services.llm import resolve_ai
 
     run_id = user_id = None
     with session_scope() as db:
@@ -67,10 +67,10 @@ def autopilot_tick() -> int | None:
     if run_id is None:
         return None
     try:
-        key = resolve_api_key(user_id)
+        ai = resolve_ai(user_id)
     except Exception:
-        key = None
-    optimizer.execute(run_id, key)
+        ai = None
+    optimizer.execute(run_id, ai)
     return run_id
 
 

@@ -1,6 +1,6 @@
 # Bot Trader
 
-Sistema pessoal de trading automatizado na Binance Spot, com painel web: login com verificação em duas etapas, chaves de API criptografadas, bots que você liga e desliga, gráficos de resultado, laboratório de backtest, leitura de notícias e do sentimento do mercado, análise com IA (Claude) e um **piloto automático** que testa e aplica melhorias nas estratégias sozinho.
+Sistema pessoal de trading automatizado na Binance Spot, com painel web: login com verificação em duas etapas, chaves de API criptografadas, bots que você liga e desliga, gráficos de resultado, laboratório de backtest, leitura de notícias e do sentimento do mercado, análise com IA (**Claude ou GPT**, você escolhe) e um **piloto automático** que testa e aplica melhorias nas estratégias sozinho.
 
 > Uso por sua conta e risco. Nenhuma estratégia garante lucro. Comece sempre em modo **simulado**.
 
@@ -24,7 +24,7 @@ Se o PowerShell bloquear: `powershell -ExecutionPolicy Bypass -File .\start.ps1`
 ### Primeiro uso
 
 1. **Crie sua conta.** O primeiro cadastro vira o dono do sistema; depois disso o cadastro fecha.
-2. **Configurações:** ative a **verificação em duas etapas** e cole as chaves da Binance (e, se quiser a IA, a chave da Anthropic). Elas são criptografadas no banco e nunca voltam para a tela; chaves com permissão de saque são recusadas.
+2. **Configurações:** ative a **verificação em duas etapas** e cole as chaves da Binance (e, se quiser a IA, a chave do Claude/Anthropic ou do GPT/OpenAI). Elas são criptografadas no banco e nunca voltam para a tela; chaves da Binance com permissão de saque são recusadas.
 3. **Laboratório:** teste estratégias no par que você quer operar, em candles de 4 horas. Use "Comparar todas as estratégias" e leia a análise automática do resultado.
 4. **Bots → Novo bot**, em modo **Simulado**. Ele usa preços reais, com taxa e slippage, sem gastar dinheiro.
 5. Acompanhe pelo **Painel**. Quando estiver confiante, edite o bot e troque para **Real**.
@@ -38,10 +38,22 @@ O botão **Sistema ligado/desligado**, no topo, para ou retoma todos os bots de 
 - **Detalhe do bot:** gráfico de candles com indicadores, compras e vendas, linhas de entrada/stop/alvo, a lista de **condições da estratégia** (o que falta para comprar ou vender), posição aberta, operações, ordens e log de eventos. Tem os botões para ligar/parar, encerrar a posição e analisar com IA.
 - **Laboratório:** guia de uso, explicação de cada campo, backtest com taxa, slippage, stop e alvos, comparação contra o buy & hold e entre estratégias, leitura automática do resultado e "Criar bot com esta configuração".
 - **Análise IA**, em três abas:
-  - **Conversa:** chat com o Claude. Ele consulta seus bots, o mercado, as notícias, o diagnóstico do piloto e **roda backtests** para embasar as respostas. Só lê dados: não envia ordens nem altera bots. Os relatórios ficam salvos.
+  - **Conversa:** chat com a IA escolhida (Claude ou GPT). Ela consulta seus bots, o mercado, as notícias, o diagnóstico do piloto e **roda backtests** para embasar as respostas. Só lê dados: não envia ordens nem altera bots. Os relatórios ficam salvos.
   - **Piloto automático:** o que foi diagnosticado, testado e mudado em cada bot, com os botões para aplicar, recusar ou desfazer, e as lições que a IA acumulou.
   - **Notícias e sentimento:** notícias classificadas (moedas afetadas, sentimento, impacto), o Índice de Medo e Ganância e quais bots estão com compras travadas agora.
-- **Configurações:** chaves (com conferência das permissões na Binance), verificação em duas etapas, sessões abertas e atividade recente da conta.
+- **Configurações:** chaves (com conferência das permissões na Binance), qual IA usar (Claude ou GPT, e o modelo do GPT), verificação em duas etapas, sessões abertas e atividade recente da conta.
+
+## IA: Claude ou GPT
+
+Cadastre a chave de um dos dois (ou dos dois) em **Configurações**. A chave cadastrada por último passa a ser a usada, e dá para alternar a qualquer momento. Tudo que usa IA funciona com os dois: a conversa (com as mesmas ferramentas: portfólio, backtests, notícias, diagnóstico do piloto), a classificação das notícias e a análise do piloto automático.
+
+| | Claude (Anthropic) | GPT (OpenAI) |
+|---|---|---|
+| Conversa e piloto automático | `claude-opus-5` | `gpt-6-sol` (padrão; dá para escolher `gpt-6-astra`, mais capaz e ~5× mais caro, ou `gpt-6-luna`) |
+| Classificação das notícias | `claude-haiku-4-5` | `gpt-6-luna` |
+| Onde criar a chave | console.anthropic.com | platform.openai.com → API keys |
+
+Ao salvar a chave da OpenAI, o sistema confere a chave e o modelo na própria OpenAI (a consulta não gasta créditos). Os modelos também podem ser trocados pelas variáveis `BT_AI_MODEL`, `BT_AI_FAST_MODEL`, `BT_OPENAI_MODEL` e `BT_OPENAI_FAST_MODEL`.
 
 ## Estratégias
 
@@ -127,7 +139,7 @@ O que isso significa:
 
 Evitar ganância alta e "só entre 25 e 75" foram testados e **descartados** (resultados inconsistentes entre os grupos de pares).
 
-**Notícias:** a cada 15 minutos o sistema lê CoinDesk, Cointelegraph, Decrypt, The Block, CryptoSlate, Livecoins e Portal do Bitcoin, identifica as moedas citadas e classifica sentimento e impacto (por palavras-chave na hora e, com a chave da Anthropic, pela IA a cada 30 minutos; notícia que parece grave é revisada pela IA na hora).
+**Notícias:** a cada 15 minutos o sistema lê CoinDesk, Cointelegraph, Decrypt, The Block, CryptoSlate, Livecoins e Portal do Bitcoin, identifica as moedas citadas e classifica sentimento e impacto (por palavras-chave na hora e, com uma chave de IA, pelo Claude ou GPT a cada 30 minutos; notícia que parece grave é revisada pela IA na hora).
 
 - **Trava de compras (padrão):** notícia grave e bem negativa sobre a moeda do bot, ou sobre o mercado todo (ex.: problema na Binance), impede compras por 12 horas. Vale a classificação da IA ou a mesma notícia grave em duas fontes, para evitar alarme falso.
 - **Trava + venda (opcional):** também vende a posição se a notícia sair depois da compra e for confirmada pela IA.
@@ -142,7 +154,7 @@ A cada ciclo (por padrão: todo dia no nível Rápido, a cada 3 dias no Médio e
 2. **Candidatas:** variações de **uma coisa por vez**: cada parâmetro da estratégia um pouco para cima e para baixo, stop, trailing, alvo, break-even, pausa, filtro de sentimento, outras estratégias, a configuração anterior e as ideias da IA.
 3. **Validação honesta:** o histórico (2 anos) é dividido em duas partes. A escolha usa só os 2/3 mais antigos; o 1/3 mais recente, que a escolha não viu, serve de confirmação. A candidata também não pode piorar em BTC e ETH.
 4. **Decisão:** só muda se melhorar nas duas partes, sem aumentar a queda máxima, com operações suficientes. No máximo uma mudança a cada 5 dias por bot. Nunca mexe no par, no tempo de candle, no modo (simulado/real) nem no valor das ordens, e nunca tira o stop.
-5. **Aprendizado:** cada ciclo fica registrado, junto com o resultado real depois da mudança. Com a chave da Anthropic, a IA escreve a análise, guarda lições ("o que a IA aprendeu") e propõe ideias novas, que passam pelas mesmas regras. No ciclo seguinte ela recebe esse histórico.
+5. **Aprendizado:** cada ciclo fica registrado, junto com o resultado real depois da mudança. Com uma chave de IA (Claude ou GPT), a IA escreve a análise, guarda lições ("o que a IA aprendeu") e propõe ideias novas, que passam pelas mesmas regras. No ciclo seguinte ela recebe esse histórico.
 
 Modos: **aplica sozinho nos simulados** (padrão), **só sugere**, **aplica sozinho também nos reais** (exige confirmar senha e 2FA; troca de estratégia em bot real sempre espera sua aprovação) ou desligado. Qualquer mudança pode ser desfeita com um clique.
 

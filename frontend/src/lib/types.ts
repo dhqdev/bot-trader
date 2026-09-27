@@ -292,6 +292,24 @@ export interface Credentials {
     checked_at: string | null;
   };
   anthropic: { configured: boolean; api_key: string | null; source: "db" | "env" | null; model: string };
+  openai: {
+    configured: boolean;
+    api_key: string | null;
+    source: "db" | "env" | null;
+    model: string;
+    fast_model: string;
+    models: { id: string; label: string }[];
+  };
+  ai: { active: AIProvider | null; active_label: string | null; labels: Record<AIProvider, string> };
+}
+
+export type AIProvider = "anthropic" | "openai";
+
+export interface AIStatus {
+  configured: boolean;
+  provider: AIProvider | null;
+  provider_label: string | null;
+  model: string | null;
 }
 
 export type LoginResult = User | { two_factor_required: true; ticket: string };
@@ -471,6 +489,7 @@ export interface AutopilotBot {
 export interface AutopilotOverview {
   bots: AutopilotBot[];
   ai_configured: boolean;
+  ai_label: string | null;
   modes: Record<AutopilotMode, string>;
 }
 

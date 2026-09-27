@@ -23,12 +23,10 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-import anthropic
 import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.core.backtest import run_backtest
 from app.core.engine import add_event, manager
 from app.core.exchange import INTERVAL_MINUTES
@@ -39,6 +37,7 @@ from app.core.strategies import STRATEGIES, get_strategy
 from app.db import session_scope
 from app.models import AIInsight, AutopilotConfig, Bot, BotEvent, NewsItem, OptimizationRun, Position, utcnow
 from app.services import backtesting
+from app.services.llm import AIConfig, structured
 
 log = logging.getLogger("bot_trader.optimizer")
 
@@ -684,21 +683,9 @@ def ai_context(db: Session, bot: Bot, base: Candidate, tested: list[Candidate], 
     )
 
 
-def ask_analyst(api_key: str, context: str, client=None) -> dict:
-    settings = get_settings()
-    client = client or anthropic.Anthropic(api_key=api_key)
-    response = client.messages.create(
-        model=settings.ai_model,
-        max_tokens=16000,
-        system=ANALYST_SYSTEM,
-        messages=[{"role": "user", "content": context}],
-        output_config={"format": {"type": "json_schema", "schema": ANALYST_SCHEMA}},
-    )
-    if response.stop_reason in ("refusal", "max_tokens"):
-        raise RuntimeError(f"resposta da IA incompleta ({response.stop_reason})")
-    text = next((b.text for b in response.content if b.type == "text"), "{}")
-    data = json.loads(text)
-    data["model"] = response.model
+def ask_analyst(ai: AIConfig, context: str, client=None) -> dict:
+    data, model = structured(ai, ANALYST_SYSTEM, context, ANALYST_SCHEMA, "analise_piloto", 16000, client=client)
+    data["model"] = model
     return data
 
 
@@ -761,11 +748,11 @@ def start_run(db: Session, bot: Bot, trigger: str) -> OptimizationRun:
     return run
 
 
-def execute(run_id: int, api_key: str | None, client=None) -> None:
+def execute(run_id: int, ai: AIConfig | None, client=None) -> None:
     """Roda um ciclo inteiro. Erros viram status "failed" (nunca derrubam o servidor)."""
     with _run_lock:
         try:
-            _execute(run_id, api_key, client)
+            _execute(run_id, ai, client)
         except Exception as exc:
             log.exception("Otimização %s falhou", run_id)
             with session_scope() as db:
@@ -776,7 +763,7 @@ def execute(run_id: int, api_key: str | None, client=None) -> None:
                         run.summary = f"A otimização falhou: {exc}"[:1000]
 
 
-def _execute(run_id: int, api_key: str | None, client=None) -> None:
+def _execute(run_id: int, ai_config: AIConfig | None, client=None) -> None:
     # leituras rápidas; a sessão fecha antes de baixar dados e rodar os testes (não trava o motor)
     with session_scope() as db:
         run = db.get(OptimizationRun, run_id)
@@ -845,12 +832,12 @@ def _execute(run_id: int, api_key: str | None, client=None) -> None:
     # IA: análise, lições e ideias novas (testadas pelas mesmas regras)
     ai = None
     ai_error = ""
-    if api_key:
+    if ai_config is not None:
         try:
             with session_scope() as db:
                 bot = db.get(Bot, db.get(OptimizationRun, run_id).bot_id)
                 context = ai_context(db, bot, base, tested, diag, decision)
-            ai = ask_analyst(api_key, context, client)
+            ai = ask_analyst(ai_config, context, client)
         except Exception as exc:
             ai_error = str(exc)[:300]
             log.warning("Análise da IA indisponível: %s", exc)

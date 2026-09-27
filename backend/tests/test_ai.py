@@ -121,3 +121,124 @@ def test_chat_endpoint_streams_and_saves_report(fake_anthropic, fresh_db):
         assert done and done[0].get("report_id")
         reports = client.get("/api/ai/reports").json()
         assert reports and client.get(f"/api/ai/reports/{reports[0]['id']}").json()["content"] == "Vou consultar.Tudo certo."
+
+
+# ---------------------------------------------------------------------------
+# GPT (OpenAI Responses API)
+
+
+class FakeOpenAIStream:
+    def __init__(self, deltas, final):
+        self._deltas = deltas
+        self._final = final
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def __aiter__(self):
+        async def gen():
+            for d in self._deltas:
+                yield SimpleNamespace(type="response.output_text.delta", delta=d)
+
+        return gen()
+
+    async def get_final_response(self):
+        return self._final
+
+
+class FakeAsyncOpenAI:
+    """1ª resposta: texto + duas chamadas de função (uma com JSON quebrado). 2ª: só texto."""
+
+    calls: list[dict] = []
+
+    def __init__(self, api_key=None):
+        self.responses = SimpleNamespace(stream=self._stream)
+
+    def _stream(self, **kwargs):
+        FakeAsyncOpenAI.calls.append(kwargs)
+        if len(FakeAsyncOpenAI.calls) == 1:
+            final = SimpleNamespace(id="resp_1", model="gpt-6-sol", status="completed", output=[
+                SimpleNamespace(type="message", content=[SimpleNamespace(type="output_text", text="Vou consultar.")]),
+                SimpleNamespace(type="function_call", call_id="call_1", name="get_portfolio", arguments='{"mode": "all"}'),
+                SimpleNamespace(type="function_call", call_id="call_2", name="run_backtest", arguments='{"symbol": '),
+            ])  # fmt: skip
+            return FakeOpenAIStream(["Vou consultar."], final)
+        final = SimpleNamespace(id="resp_2", model="gpt-6-sol", status="completed",
+                                output=[SimpleNamespace(type="message", content=[SimpleNamespace(type="output_text", text="Tudo certo.")])])  # fmt: skip
+        return FakeOpenAIStream(["Tudo ", "certo."], final)
+
+
+@pytest.fixture
+def fake_openai(monkeypatch):
+    FakeAsyncOpenAI.calls = []
+    monkeypatch.setattr(ai_mod.openai, "AsyncOpenAI", FakeAsyncOpenAI)
+    return FakeAsyncOpenAI
+
+
+def test_gpt_agent_loop_runs_tools(fake_openai):
+    from app.services.llm import AIConfig
+
+    gpt = AIConfig("openai", "sk-test", "gpt-6-sol", "gpt-6-luna")
+    events = asyncio.run(_collect(ai_mod.stream_chat(gpt, 1, [{"role": "user", "content": "Como estão meus bots?"}], None, None)))
+    assert "".join(e["text"] for e in events if e["type"] == "text") == "Vou consultar.Tudo certo."
+    done = [e for e in events if e["type"] == "tool_done"]
+    assert [d["ok"] for d in done] == [True, False]  # JSON quebrado vira erro para a IA corrigir
+    assert events[-1] == {"type": "done", "model": "gpt-6-sol"}
+
+    first, second = fake_openai.calls
+    assert first["model"] == "gpt-6-sol" and first["instructions"].startswith("Você é o analista")
+    assert all(t["type"] == "function" and t["strict"] is False for t in first["tools"])
+    assert {t["name"] for t in first["tools"]} >= {"get_portfolio", "run_backtest", "get_news"}
+    assert "previous_response_id" not in first
+    # 2ª chamada continua a mesma resposta e devolve o resultado de cada função
+    assert second["previous_response_id"] == "resp_1"
+    outputs = {o["call_id"]: o["output"] for o in second["input"]}
+    assert outputs.keys() == {"call_1", "call_2"} and "summary" in json.loads(outputs["call_1"]) and outputs["call_2"].startswith("Erro")
+
+
+def test_chat_endpoint_uses_chosen_provider(fake_anthropic, fake_openai, monkeypatch):
+    from app.services import llm
+
+    monkeypatch.setattr(llm, "check_openai_key", lambda key, model: None)
+    with TestClient(app) as client:
+        assert client.post("/api/auth/login", json={"email": "ai@test.dev", "password": "12345678"}).status_code == 200
+        # a chave mais recente (GPT) passa a ser a usada
+        r = client.put("/api/settings/openai", json={"api_key": "sk-proj-teste-123456", "model": "gpt-6-sol", "password": "12345678"})
+        assert r.status_code == 200, r.text
+        status = client.get("/api/ai/status").json()
+        assert status["provider"] == "openai" and status["model"] == "gpt-6-sol"
+        with client.stream("POST", "/api/ai/chat", json={"messages": [{"role": "user", "content": "Resumo?"}]}) as r:
+            body = "".join(r.iter_text())
+        assert fake_openai.calls and not fake_anthropic.calls and '"model": "gpt-6-sol"' in body
+
+        creds = client.get("/api/settings/credentials").json()
+        assert creds["ai"]["active"] == "openai" and creds["openai"]["api_key"] == "sk-p••••3456"
+        assert "sk-proj-teste-123456" not in str(creds)
+        # volta para o Claude (a chave dele já estava salva)
+        assert client.put("/api/settings/ai-provider", json={"provider": "anthropic"}).json()["active"] == "anthropic"
+        assert client.get("/api/ai/status").json()["provider"] == "anthropic"
+        # sem a chave do provedor não dá para escolher
+        client.delete("/api/settings/openai")
+        assert client.put("/api/settings/ai-provider", json={"provider": "openai"}).status_code == 400
+
+
+def test_openai_key_needs_password_and_valid_key(monkeypatch):
+    from app.services import llm
+
+    def reject(key, model):
+        raise ValueError("Chave da OpenAI inválida. Confira se copiou a chave inteira (começa com sk-).")
+
+    monkeypatch.setattr(llm, "check_openai_key", reject)
+    with TestClient(app) as client:
+        client.post("/api/auth/login", json={"email": "ai@test.dev", "password": "12345678"})
+        client.delete("/api/settings/openai")  # começa sem chave da OpenAI
+        body = {"api_key": "sk-proj-errada-999999", "model": "gpt-6-sol"}
+        assert client.put("/api/settings/openai", json=body).status_code == 403  # sem a senha
+        r = client.put("/api/settings/openai", json={**body, "password": "12345678"})
+        assert r.status_code == 400 and "inválida" in r.json()["detail"]
+        assert client.get("/api/settings/credentials").json()["openai"]["configured"] is False
+        # nome de modelo com caracteres estranhos é recusado antes de chegar na OpenAI
+        assert client.put("/api/settings/openai", json={**body, "model": "gpt 6; rm -rf", "password": "12345678"}).status_code == 422
