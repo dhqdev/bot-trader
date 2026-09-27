@@ -46,6 +46,20 @@ jobs:
           npm ci
           npm run build
 
+      # Navega por todas as telas clicando no menu (computador e celular) com o
+      # sistema real rodando. Pega erros que só aparecem ao trocar de tela.
+      - name: Navegação por todas as telas (e2e)
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:8010
+          BT_DATABASE_URL: sqlite:////tmp/e2e.db
+          BT_SECRET_KEY: e2e-only-secret-key-never-used-in-production-0123456789
+        run: |
+          npx playwright install --with-deps chromium
+          (cd ../backend && nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8010 > /tmp/server.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8010/api/health && break; sleep 1; done
+          npm run test:e2e || (tail -n 60 /tmp/server.log; exit 1)
+
   docker:
     name: Imagem Docker
     needs: test

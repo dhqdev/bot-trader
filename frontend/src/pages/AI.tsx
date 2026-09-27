@@ -83,7 +83,9 @@ export function AIPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reports"] }),
   });
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [messages]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages]);
 
   // "Analisar com IA" vindo de um bot ou backtest: envia a pergunta automaticamente
   useEffect(() => {

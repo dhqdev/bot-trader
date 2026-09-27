@@ -126,7 +126,11 @@ export function Layout() {
   const { canInstall, install } = useInstallPrompt();
   const { pathname } = useLocation();
 
-  useEffect(() => window.scrollTo(0, 0), [pathname]);
+  // corpo com chaves: no Chrome atual scrollTo devolve uma Promise, e um efeito
+  // não pode devolver nada além de uma função de limpeza
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
 
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">

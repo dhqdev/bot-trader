@@ -1,5 +1,6 @@
 import { createBrowserRouter, RouterProvider } from "react-router";
 import { Layout } from "./components/Layout";
+import { RouteError } from "./components/RouteError";
 import { Loading } from "./components/ui";
 import { useAuth } from "./lib/auth";
 import { AIPage } from "./pages/AI";
@@ -14,16 +15,23 @@ import { SettingsPage } from "./pages/Settings";
 const router = createBrowserRouter([
   {
     element: <Layout />,
+    errorElement: <RouteError standalone />,
     children: [
-      { path: "/", element: <DashboardPage /> },
-      { path: "/bots", element: <BotsPage /> },
-      { path: "/bots/new", element: <BotFormPage /> },
-      { path: "/bots/:id", element: <BotDetailPage /> },
-      { path: "/bots/:id/edit", element: <BotFormPage /> },
-      { path: "/lab", element: <LabPage /> },
-      { path: "/ai", element: <AIPage /> },
-      { path: "/settings", element: <SettingsPage /> },
-      { path: "*", element: <DashboardPage /> },
+      {
+        // erros de uma tela aparecem dentro do layout, com o menu funcionando
+        errorElement: <RouteError />,
+        children: [
+          { path: "/", element: <DashboardPage /> },
+          { path: "/bots", element: <BotsPage /> },
+          { path: "/bots/new", element: <BotFormPage /> },
+          { path: "/bots/:id", element: <BotDetailPage /> },
+          { path: "/bots/:id/edit", element: <BotFormPage /> },
+          { path: "/lab", element: <LabPage /> },
+          { path: "/ai", element: <AIPage /> },
+          { path: "/settings", element: <SettingsPage /> },
+          { path: "*", element: <DashboardPage /> },
+        ],
+      },
     ],
   },
 ]);
