@@ -1,25 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
-import { Bot as BotIcon, Plus, ShieldAlert } from "lucide-react";
+import { Bot as BotIcon, Newspaper, Plus, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { ModeBadge, StatusBadge, EventsList, PositionsTable } from "../components/bot";
+import { EventsList, ModeBadge, PositionsTable, StatusBadge, VolatilityBadge } from "../components/bot";
 import { DailyPnlChart, EquityChart } from "../components/charts";
-import { TierBadge } from "../components/profiles";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Pnl, Segmented, Stat } from "../components/ui";
 import { api } from "../lib/api";
-import { duration, fearGreedTone, money, num, pct, signedMoney } from "../lib/format";
-import type { BotAlert, Credentials, Dashboard, SentimentResponse, Wallet } from "../lib/types";
+import { duration, fearGreedTone, money, num, pct, signedMoney, timeAgo } from "../lib/format";
+import type { BotAlert, Credentials, Dashboard, NewsItem, SentimentResponse, Wallet } from "../lib/types";
 
 const TONE_TEXT = { bad: "text-bad-text", warn: "text-warn-text", neutral: "text-ink", good: "text-good-text" } as const;
 
-/** Humor do mercado e travas por notícia, com link para a aba de notícias. */
+/** Humor do mercado, notícias fortes que a IA separou e robôs com compras travadas. */
 function MarketCard() {
   const sentiment = useQuery({ queryKey: ["sentiment"], queryFn: () => api.get<SentimentResponse>("/news/sentiment?days=120"), refetchInterval: 600_000 });
   const alerts = useQuery({ queryKey: ["news-alerts"], queryFn: () => api.get<BotAlert[]>("/news/alerts"), refetchInterval: 60_000 });
+  const news = useQuery({ queryKey: ["news", "high"], queryFn: () => api.get<NewsItem[]>("/news?impact=high&hours=48&limit=3"), refetchInterval: 300_000 });
   const latest = sentiment.data?.latest;
   const blocked = (alerts.data ?? []).filter((a) => a.blocked);
   return (
-    <Card title="Mercado agora" action={<Link to="/ai/noticias" className="text-xs text-accent hover:underline">notícias</Link>}>
+    <Card title="Mercado agora">
       <div className="space-y-2 text-sm">
         {latest ? (
           <div className="flex items-baseline gap-2">
@@ -42,7 +42,20 @@ function MarketCard() {
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted">Nenhum bot com compras travadas por sentimento ou notícia.</p>
+          <p className="text-xs text-muted">Nenhum robô com compras travadas por sentimento ou notícia.</p>
+        )}
+        {news.data && news.data.length > 0 && (
+          <ul className="space-y-1.5 border-t border-line pt-2 text-xs">
+            {news.data.map((n) => (
+              <li key={n.id} className="flex gap-1.5">
+                <Newspaper className={`mt-0.5 size-3.5 shrink-0 ${n.sentiment < 0 ? "text-bad-text" : n.sentiment > 0 ? "text-good-text" : "text-muted"}`} />
+                <span className="min-w-0">
+                  <a href={n.url} target="_blank" rel="noopener noreferrer" className="text-ink hover:underline">{n.ai_summary || n.title}</a>
+                  <span className="text-muted"> · {n.source} · {timeAgo(n.published_at)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </Card>
@@ -113,7 +126,7 @@ export function DashboardPage() {
   const header = (
     <PageHeader
       title="Painel"
-      subtitle="Quanto seus bots estão ganhando, em tempo real."
+      subtitle="Quanto seus robôs estão ganhando, em tempo real."
       actions={
         <Segmented<ModeFilter>
           value={mode}
@@ -137,11 +150,10 @@ export function DashboardPage() {
       <>
         {header}
         <Card>
-          <Empty icon={<BotIcon className="size-8" />} title={mode === "live" ? "Nenhum bot em modo real" : "Nenhum bot ainda"}>
-            Crie um bot em modo simulado para testar sem risco. Ele usa preços reais da OKX, com taxa e slippage.
+          <Empty icon={<BotIcon className="size-8" />} title={mode === "live" ? "Nenhum robô com dinheiro real" : "Nenhum robô ainda"}>
+            Escolha a moeda, quanto investir e a volatilidade: o sistema testa todos os robôs e mostra o melhor. Comece no simulado, sem risco.
             <div className="mt-4 flex justify-center gap-2">
-              <Button variant="primary" onClick={() => navigate("/bots/new")}><Plus className="size-4" />Criar bot</Button>
-              <Button onClick={() => navigate("/lab")}>Testar estratégias</Button>
+              <Button variant="primary" onClick={() => navigate("/bots/new")}><Plus className="size-4" />Criar robô</Button>
             </div>
           </Empty>
         </Card>
@@ -166,7 +178,7 @@ export function DashboardPage() {
           </div>
         </div>
         <Stat label="Taxa de acerto" value={s.win_rate == null ? "–" : pct(s.win_rate, false, 0)} sub={`${s.wins} de ${s.trades} operações com lucro`} />
-        <Stat label="Bots operando" value={`${s.running_bots} de ${s.total_bots}`} sub={`${s.open_positions} posições abertas · ${money(s.invested)} investidos`} />
+        <Stat label="Robôs ligados" value={`${s.running_bots} de ${s.total_bots}`} sub={`${s.open_positions} posições abertas · ${money(s.invested)} investidos`} />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -179,7 +191,7 @@ export function DashboardPage() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card title="Bots" className="lg:col-span-2" action={<Link to="/bots/new" className="text-xs text-accent hover:underline">+ Novo bot</Link>} padded={false}>
+        <Card title="Robôs" className="lg:col-span-2" action={<Link to="/bots/new" className="text-xs text-accent hover:underline">+ Novo robô</Link>} padded={false}>
           {/* celular: cartões */}
           <ul className="divide-y divide-line md:hidden">
             {data.bots.map((b) => (
@@ -189,7 +201,7 @@ export function DashboardPage() {
                     <div className="truncate font-medium text-ink">{b.name}</div>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
                       <StatusBadge bot={b} />
-                      <TierBadge interval={b.interval} />
+                      <VolatilityBadge interval={b.interval} />
                       <ModeBadge mode={b.mode} />
                     </div>
                   </div>
@@ -205,7 +217,7 @@ export function DashboardPage() {
             <table className="w-full text-sm tabular">
               <thead>
                 <tr className="border-b border-line text-left text-xs text-ink-2">
-                  <th className="py-2 pr-3 font-medium">Bot</th>
+                  <th className="py-2 pr-3 font-medium">Robô</th>
                   <th className="py-2 pr-3 font-medium">Estratégia</th>
                   <th className="py-2 pr-3 font-medium">Status</th>
                   <th className="py-2 pr-3 text-right font-medium">Operando há</th>
@@ -218,7 +230,7 @@ export function DashboardPage() {
                   <tr key={b.id} className="cursor-pointer hover:bg-surface-2" onClick={() => navigate(`/bots/${b.id}`)}>
                     <td className="py-2.5 pr-3">
                       <div className="font-medium text-ink">{b.name}</div>
-                      <div className="flex items-center gap-1.5 text-xs text-muted">{b.symbol} · {b.interval} <TierBadge interval={b.interval} /> <ModeBadge mode={b.mode} /></div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted">{b.symbol} <VolatilityBadge interval={b.interval} /> <ModeBadge mode={b.mode} /></div>
                     </td>
                     <td className="py-2.5 pr-3 text-ink-2">{b.strategy_name}</td>
                     <td className="py-2.5 pr-3"><StatusBadge bot={b} /></td>

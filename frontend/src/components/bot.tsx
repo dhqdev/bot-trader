@@ -1,12 +1,25 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Check, ExternalLink, Info, Radio, ShieldAlert, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Check, ExternalLink, Info, Radio, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { dateTime, duration, NEWS_GUARD_LABELS, num, pct, price, qty, REASONS, SENTIMENT_FILTER_LABELS, timeAgo } from "../lib/format";
-import type { Bot, BotEvent, MarketFilters, OrderRow, Position, Snapshot } from "../lib/types";
+import type { Bot, BotEvent, MarketFilters, Position, Snapshot } from "../lib/types";
 import { Badge, Dot, Empty, Pnl } from "./ui";
 
 export function ModeBadge({ mode }: { mode: Bot["mode"] }) {
   return mode === "live" ? <Badge tone="warn">Real</Badge> : <Badge tone="accent">Simulado</Badge>;
+}
+
+const LEVEL_OF_INTERVAL: Record<string, "baixa" | "media" | "alta"> = {
+  "1m": "alta", "3m": "alta", "5m": "alta", "15m": "alta",
+  "30m": "media", "1h": "media", "2h": "media",
+  "4h": "baixa", "6h": "baixa", "12h": "baixa", "1d": "baixa",
+};
+
+/** Volatilidade do robô, pelo tempo de candle (baixa = operações de dias; alta = de minutos). */
+export function VolatilityBadge({ interval }: { interval: string }) {
+  const level = LEVEL_OF_INTERVAL[interval] ?? "baixa";
+  const tone = level === "baixa" ? "good" : level === "media" ? "warn" : "bad";
+  return <Badge tone={tone}>Volatilidade {level === "media" ? "média" : level}</Badge>;
 }
 
 export function StatusBadge({ bot }: { bot: Pick<Bot, "status" | "running" | "status_reason"> }) {
@@ -185,47 +198,6 @@ export function PositionsTable({ positions, quote, showBot, compact }: { positio
       </table>
     </div>
     </>
-  );
-}
-
-export function OrdersTable({ orders, quote }: { orders: OrderRow[]; quote: string }) {
-  if (!orders.length) return <Empty title="Nenhuma ordem ainda" />;
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm tabular">
-        <thead>
-          <tr className="border-b border-line text-left text-xs text-ink-2">
-            <th className="py-2 pr-3 font-medium">Data</th>
-            <th className="py-2 pr-3 font-medium">Lado</th>
-            <th className="py-2 pr-3 text-right font-medium">Preço</th>
-            <th className="py-2 pr-3 text-right font-medium">Quantidade</th>
-            <th className="py-2 pr-3 text-right font-medium">Total ({quote})</th>
-            <th className="py-2 pr-3 text-right font-medium">Taxa</th>
-            <th className="py-2 pr-3 font-medium">Motivo</th>
-            <th className="py-2 font-medium">ID na OKX</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {orders.map((o) => (
-            <tr key={o.id}>
-              <td className="py-2 pr-3 whitespace-nowrap text-ink-2">{dateTime(o.created_at)}</td>
-              <td className="py-2 pr-3">
-                <span className="inline-flex items-center gap-1">
-                  {o.side === "BUY" ? <ArrowUpRight className="size-3.5 text-accent" /> : <ArrowDownRight className="size-3.5 text-ink-2" />}
-                  {o.side === "BUY" ? "Compra" : "Venda"}
-                </span>
-              </td>
-              <td className="py-2 pr-3 text-right">{price(o.price)}</td>
-              <td className="py-2 pr-3 text-right">{qty(o.qty)}</td>
-              <td className="py-2 pr-3 text-right">{num(o.quote_qty)}</td>
-              <td className="py-2 pr-3 text-right text-ink-2">{num(o.fee_quote, 4)}</td>
-              <td className="py-2 pr-3 text-ink-2">{REASONS[o.reason] ?? o.reason}</td>
-              <td className="py-2 text-xs text-muted">{o.mode === "paper" ? "simulada" : o.exchange_order_id}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 

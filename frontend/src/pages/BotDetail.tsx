@@ -1,95 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Play, RotateCcw, Sparkles, Square, Trash2, XCircle } from "lucide-react";
+import clsx from "clsx";
+import { ChevronDown, Pencil, Play, RotateCcw, Square, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
-import { ChecksList, EventsList, ModeBadge, OpenPositionCard, OrdersTable, PositionsTable, StatusBadge } from "../components/bot";
+import { useNavigate, useParams } from "react-router";
+import { AutopilotCard } from "../components/autopilot";
+import { ChecksList, EventsList, ModeBadge, OpenPositionCard, PositionsTable, StatusBadge, VolatilityBadge } from "../components/bot";
 import { CandleChart } from "../components/charts";
-import { TierBadge } from "../components/profiles";
-import { useStrategies } from "../components/forms";
-import { Button, Card, Confirm, ErrorBox, Loading, PageHeader, Pnl, Stat, Tabs } from "../components/ui";
+import { Button, Card, Confirm, ErrorBox, Field, Input, Loading, Modal, PageHeader, Pnl, Segmented, Stat, Tabs } from "../components/ui";
 import { api } from "../lib/api";
-import { dateTime, duration, INTERVAL_LABELS, money, NEWS_GUARD_LABELS, num, pct, SENTIMENT_FILTER_LABELS, timeAgo } from "../lib/format";
-import type { Bot, BotAutopilot, BotChart, BotEvent, OrderRow, Position } from "../lib/types";
-import { Findings, RunStatusBadge, SuggestionBox } from "./Autopilot";
+import { duration, INTERVAL_LABELS, money, NEWS_GUARD_LABELS, num, pct, SENTIMENT_FILTER_LABELS, timeAgo } from "../lib/format";
+import type { Bot, BotChart, BotEvent, Credentials, Mode, Position, StrategiesResponse } from "../lib/types";
 
-type Tab = "trades" | "orders" | "events";
+type Tab = "trades" | "events";
 type Action = "start" | "stop" | "close" | "delete" | "reset" | null;
-
-function ConfigSummary({ bot }: { bot: Bot }) {
-  const strategies = useStrategies();
-  const info = strategies.data?.strategies.find((s) => s.key === bot.strategy);
-  const r = bot.risk;
-  const sizing =
-    r.sizing_mode === "fixed_quote" ? `${num(r.order_size_quote)} ${bot.quote_asset} por compra` : r.sizing_mode === "percent_balance" ? `${r.balance_percent}% do saldo` : `${r.risk_percent}% de risco até o stop`;
-  const stop = r.stop_loss_mode === "atr" ? `${num(r.stop_loss_atr_mult)}× ATR` : r.stop_loss_mode === "percent" ? `${num(r.stop_loss_pct)}%` : "sem stop";
-  const usesFear = r.sentiment_filter === "avoid_extreme_fear" || r.sentiment_filter === "both";
-  const sentimentText = `${SENTIMENT_FILTER_LABELS[r.sentiment_filter] ?? r.sentiment_filter}${usesFear ? ` (≤ ${r.fear_threshold})` : ""}`;
-  return (
-    <dl className="text-sm">
-      <Row k="Estratégia" v={bot.strategy_name} />
-      <Row k="Candle" v={INTERVAL_LABELS[bot.interval] ?? bot.interval} />
-      <Row k="Tamanho" v={sizing} />
-      <Row k="Stop loss" v={stop} />
-      <Row k="Trailing" v={r.trailing_enabled ? `${r.trailing_mode === "atr" ? `${num(r.trailing_atr_mult)}× ATR` : `${num(r.trailing_pct)}%`} após +${num(r.trailing_activation_pct)}%` : "desligado"} />
-      <Row k="Alvos" v={r.take_profits.length ? r.take_profits.map((t) => `+${num(t.pct)}% (vende ${num(t.size_pct)}%)`).join(", ") : "nenhum (sai pelo sinal)"} />
-      <Row k="Break-even" v={r.breakeven_at_pct ? `após +${num(r.breakeven_at_pct)}%` : "desligado"} />
-      <Row k="Perda diária máx." v={r.max_daily_loss_quote ? `${num(r.max_daily_loss_quote)} ${bot.quote_asset}` : "sem limite"} />
-      <Row k="Sentimento" v={sentimentText} />
-      <Row k="Notícias" v={r.news_guard === "off" ? "desligada" : `${NEWS_GUARD_LABELS[r.news_guard]} (${r.news_window_hours} h)`} />
-      {info?.params.map((p) => (
-        <Row key={p.name} k={p.label} v={String(typeof bot.strategy_params[p.name] === "boolean" ? (bot.strategy_params[p.name] ? "sim" : "não") : bot.strategy_params[p.name] ?? p.default)} />
-      ))}
-    </dl>
-  );
-}
-
-function AutopilotMini({ botId }: { botId: number }) {
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const { data } = useQuery({
-    queryKey: ["bot", String(botId), "autopilot"],
-    queryFn: () => api.get<BotAutopilot>(`/autopilot/bots/${botId}`),
-    refetchInterval: (q) => (q.state.data?.running ? 4000 : 30_000),
-  });
-  const run = useMutation({
-    mutationFn: () => api.post(`/autopilot/bots/${botId}/run`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bot", String(botId), "autopilot"] }),
-  });
-  if (!data) return null;
-  const last = data.last_run;
-  const next = data.autopilot.mode !== "off" && data.autopilot.next_run_at ? ` · próximo ciclo: ${dateTime(data.autopilot.next_run_at)}` : "";
-  return (
-    <Card title="Piloto automático" action={<Link to="/ai/piloto" className="text-xs text-accent hover:underline">abrir</Link>}>
-      <div className="space-y-3 text-sm">
-        <p className="text-xs text-ink-2">
-          Modo: <span className="text-ink">{data.autopilot.mode_label}</span>
-          {next}
-        </p>
-        {data.suggestion && <SuggestionBox run={data.suggestion} onDetails={() => navigate("/ai/piloto")} />}
-        {last && last.id !== data.suggestion?.id && (
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-xs">
-              <RunStatusBadge status={last.status} />
-              <span className="text-muted">{timeAgo(last.created_at)}</span>
-            </div>
-            {last.summary && <p className="line-clamp-3 text-xs text-ink-2">{last.summary}</p>}
-          </div>
-        )}
-        {last && last.status !== "running" && last.findings.length > 0 && (
-          <div className="border-t border-line pt-3">
-            <div className="mb-1.5 text-xs font-medium text-ink-2">Diagnóstico</div>
-            <Findings findings={last.findings} />
-          </div>
-        )}
-        <Button size="sm" onClick={() => run.mutate()} loading={run.isPending} disabled={data.running}>
-          <Play className="size-3.5" />
-          {data.running ? "Analisando…" : "Otimizar agora"}
-        </Button>
-        <ErrorBox error={run.error} />
-      </div>
-    </Card>
-  );
-}
 
 function Row({ k, v }: { k: string; v: string }) {
   return (
@@ -100,18 +23,106 @@ function Row({ k, v }: { k: string; v: string }) {
   );
 }
 
+/** As regras do robô, para quem quiser conferir (fechado por padrão). */
+function TechnicalDetails({ bot }: { bot: Bot }) {
+  const [open, setOpen] = useState(false);
+  const strategies = useQuery({ queryKey: ["strategies"], queryFn: () => api.get<StrategiesResponse>("/strategies"), staleTime: Infinity, enabled: open });
+  const info = strategies.data?.strategies.find((s) => s.key === bot.strategy);
+  const r = bot.risk;
+  const stop = r.stop_loss_mode === "atr" ? `${num(r.stop_loss_atr_mult)}× ATR` : r.stop_loss_mode === "percent" ? `${num(r.stop_loss_pct)}%` : "sem stop";
+  const trailing = r.trailing_mode === "atr" ? `${num(r.trailing_atr_mult)}× ATR` : `${num(r.trailing_pct)}%`;
+  return (
+    <Card padded={false}>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-ink">
+        Detalhes técnicos
+        <ChevronDown className={clsx("size-4 text-muted transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <dl className="px-4 pb-4 text-sm">
+          <Row k="Estratégia" v={bot.strategy_name} />
+          <Row k="Candle" v={INTERVAL_LABELS[bot.interval] ?? bot.interval} />
+          <Row k="Stop loss" v={stop} />
+          <Row k="Trailing" v={r.trailing_enabled ? `${trailing} após +${num(r.trailing_activation_pct)}%` : "desligado"} />
+          <Row k="Alvos" v={r.take_profits.length ? r.take_profits.map((t) => `+${num(t.pct)}% (vende ${num(t.size_pct)}%)`).join(", ") : "sai pelo sinal"} />
+          <Row k="Sentimento" v={SENTIMENT_FILTER_LABELS[r.sentiment_filter] ?? r.sentiment_filter} />
+          <Row k="Notícias" v={r.news_guard === "off" ? "desligada" : NEWS_GUARD_LABELS[r.news_guard]} />
+          {info?.params.map((p) => (
+            <Row key={p.name} k={p.label} v={String(typeof bot.strategy_params[p.name] === "boolean" ? (bot.strategy_params[p.name] ? "sim" : "não") : bot.strategy_params[p.name] ?? p.default)} />
+          ))}
+        </dl>
+      )}
+    </Card>
+  );
+}
+
+function EditModal({ bot, onClose }: { bot: Bot; onClose: () => void }) {
+  const qc = useQueryClient();
+  const creds = useQuery({ queryKey: ["credentials"], queryFn: () => api.get<Credentials>("/settings/credentials") });
+  const [name, setName] = useState(bot.name);
+  const [amount, setAmount] = useState(bot.risk.order_size_quote);
+  const [mode, setMode] = useState<Mode>(bot.mode);
+  const save = useMutation({
+    mutationFn: () => {
+      const body: Record<string, unknown> = { name, risk: { ...bot.risk, sizing_mode: "fixed_quote", order_size_quote: amount } };
+      if (mode !== bot.mode) body.mode = mode;
+      return api.put<Bot>(`/bots/${bot.id}`, body);
+    },
+    onSuccess: () => {
+      for (const k of ["bots", "dashboard"]) qc.invalidateQueries({ queryKey: [k] });
+      qc.invalidateQueries({ queryKey: ["bot", String(bot.id)] });
+      onClose();
+    },
+  });
+  const noKeys = mode === "live" && creds.data != null && !creds.data.okx.configured;
+  return (
+    <Modal open onClose={onClose} title="Editar robô">
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate();
+        }}
+      >
+        <Field label="Nome">
+          <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
+        </Field>
+        <Field label={`Valor por operação (${bot.quote_asset})`} help="Vale a partir da próxima compra.">
+          <Input type="number" min={5} step="any" value={amount} onChange={(e) => setAmount(Number(e.target.value))} required />
+        </Field>
+        <div className="space-y-2">
+          <Segmented<Mode>
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "paper", label: "Simulado" },
+              { value: "live", label: "Dinheiro real" },
+            ]}
+          />
+          {mode !== bot.mode && <p className="text-xs text-ink-2">Para trocar o modo, o robô precisa estar desligado e sem posição aberta.</p>}
+          {noKeys && <p className="text-xs text-warn-text">Cadastre a chave da OKX em Configurações para usar dinheiro real.</p>}
+        </div>
+        <ErrorBox error={save.error} />
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" variant="primary" loading={save.isPending} disabled={noKeys || !(amount >= 5)}>Salvar</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export function BotDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("trades");
   const [action, setAction] = useState<Action>(null);
+  const [editing, setEditing] = useState(false);
 
   const bot = useQuery({ queryKey: ["bot", id], queryFn: () => api.get<Bot>(`/bots/${id}`), refetchInterval: 10_000 });
   const chart = useQuery({ queryKey: ["bot", id, "chart"], queryFn: () => api.get<BotChart>(`/bots/${id}/chart?limit=300`), refetchInterval: 60_000 });
   const positions = useQuery({ queryKey: ["bot", id, "positions"], queryFn: () => api.get<Position[]>(`/bots/${id}/positions`), refetchInterval: 15_000 });
-  const orders = useQuery({ queryKey: ["bot", id, "orders"], queryFn: () => api.get<OrderRow[]>(`/bots/${id}/orders`), enabled: tab === "orders" });
-  const events = useQuery({ queryKey: ["bot", id, "events"], queryFn: () => api.get<BotEvent[]>(`/bots/${id}/events?limit=150`), refetchInterval: 15_000 });
+  const events = useQuery({ queryKey: ["bot", id, "events"], queryFn: () => api.get<BotEvent[]>(`/bots/${id}/events?limit=150`), refetchInterval: 15_000, enabled: tab === "events" });
 
   const mutate = useMutation({
     mutationFn: (a: Exclude<Action, null>) => {
@@ -121,30 +132,33 @@ export function BotDetailPage() {
     },
     onSuccess: (_, a) => {
       setAction(null);
-      qc.invalidateQueries({ queryKey: ["bots"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["system"] });
+      for (const k of ["bots", "dashboard", "system"]) qc.invalidateQueries({ queryKey: [k] });
       if (a === "delete") navigate("/bots");
       else qc.invalidateQueries({ queryKey: ["bot", id] });
     },
   });
 
   if (bot.isLoading) return <Loading />;
-  if (!bot.data) return <ErrorBox error={bot.error ?? "Bot não encontrado"} />;
+  if (!bot.data) return <ErrorBox error={bot.error ?? "Robô não encontrado"} />;
   const b = bot.data;
   const running = b.status === "running";
   const q = b.quote_asset;
 
   const confirmations: Record<Exclude<Action, null>, { title: string; message: string; label: string; danger?: boolean }> = {
     start: {
-      title: b.mode === "live" ? "Ligar bot em modo REAL?" : "Ligar bot?",
-      message: b.mode === "live" ? "O bot vai enviar ordens reais à OKX com o seu dinheiro, conforme a estratégia e o risco configurados." : "O bot vai operar com saldo simulado e preços reais.",
+      title: b.mode === "live" ? "Ligar com dinheiro real?" : "Ligar o robô?",
+      message: b.mode === "live" ? `O robô vai enviar ordens reais à OKX: cada compra usa ${money(b.risk.order_size_quote, q)}.` : "O robô vai operar com saldo simulado e preços reais.",
       label: "Ligar",
     },
-    stop: { title: "Parar bot?", message: b.position ? "A posição aberta continua aberta e deixa de ser monitorada (sem stop automático) até você ligar o bot de novo." : "O bot deixa de avaliar o mercado.", label: "Parar", danger: true },
-    close: { title: "Encerrar posição agora?", message: `Vende toda a posição a mercado${b.mode === "live" ? " na OKX" : ""}.`, label: "Vender agora", danger: true },
-    delete: { title: "Excluir bot?", message: "O histórico de operações deste bot também será apagado.", label: "Excluir", danger: true },
-    reset: { title: "Resetar simulação?", message: "Apaga operações, ordens e eventos deste bot e volta o saldo simulado ao valor inicial.", label: "Resetar", danger: true },
+    stop: {
+      title: "Desligar o robô?",
+      message: b.position ? "A posição aberta continua aberta e deixa de ser acompanhada (sem stop automático) até você ligar de novo." : "O robô deixa de comprar e vender.",
+      label: "Desligar",
+      danger: true,
+    },
+    close: { title: "Vender agora?", message: `Vende toda a posição a mercado${b.mode === "live" ? " na OKX" : ""}.`, label: "Vender agora", danger: true },
+    delete: { title: "Excluir robô?", message: "O histórico de operações deste robô também será apagado.", label: "Excluir", danger: true },
+    reset: { title: "Recomeçar a simulação?", message: "Apaga as operações deste robô e volta o saldo simulado ao valor inicial.", label: "Recomeçar", danger: true },
   };
 
   return (
@@ -152,24 +166,21 @@ export function BotDetailPage() {
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-2">
-            {b.name} <ModeBadge mode={b.mode} /> <TierBadge interval={b.interval} /> <StatusBadge bot={b} />
+            {b.name} <ModeBadge mode={b.mode} /> <VolatilityBadge interval={b.interval} /> <StatusBadge bot={b} />
           </span>
         }
-        subtitle={`${b.symbol} · ${INTERVAL_LABELS[b.interval] ?? b.interval} · ${b.strategy_name}${b.last_tick_at ? ` · última checagem ${timeAgo(b.last_tick_at)}` : ""}`}
+        subtitle={`${b.symbol} · ${b.strategy_name}${b.last_tick_at ? ` · checado ${timeAgo(b.last_tick_at)}` : ""}`}
         actions={
           <>
             {running ? (
-              <Button onClick={() => setAction("stop")}><Square className="size-4" />Parar</Button>
+              <Button onClick={() => setAction("stop")}><Square className="size-4" />Desligar</Button>
             ) : (
               <Button variant="primary" onClick={() => setAction("start")}><Play className="size-4" />Ligar</Button>
             )}
-            {b.position && <Button variant="danger" onClick={() => setAction("close")}><XCircle className="size-4" />Encerrar posição</Button>}
-            <Button onClick={() => navigate("/ai", { state: { botId: b.id, prompt: `Analise o desempenho do bot "${b.name}" e sugira melhorias concretas, validando com backtest.` } })}>
-              <Sparkles className="size-4" />Analisar com IA
-            </Button>
-            <Button variant="ghost" onClick={() => navigate(`/bots/${b.id}/edit`)} aria-label="Editar"><Pencil className="size-4" /></Button>
+            {b.position && <Button variant="danger" onClick={() => setAction("close")}><XCircle className="size-4" />Vender agora</Button>}
+            <Button variant="ghost" onClick={() => setEditing(true)} aria-label="Editar"><Pencil className="size-4" /></Button>
             {b.mode === "paper" && !running && (
-              <Button variant="ghost" onClick={() => setAction("reset")} aria-label="Resetar simulação"><RotateCcw className="size-4" /></Button>
+              <Button variant="ghost" onClick={() => setAction("reset")} aria-label="Recomeçar simulação"><RotateCcw className="size-4" /></Button>
             )}
             {!running && <Button variant="ghost" onClick={() => setAction("delete")} aria-label="Excluir"><Trash2 className="size-4" /></Button>}
           </>
@@ -183,13 +194,13 @@ export function BotDetailPage() {
       )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Stat label="Resultado total" value={<Pnl value={b.stats.total_pnl} quote={q} />} sub={`Hoje ${b.stats.today_pnl >= 0 ? "+" : ""}${num(b.stats.today_pnl)}`} />
-        <Stat label="Realizado" value={<Pnl value={b.stats.realized_pnl} quote={q} />} />
+        <Stat label="Resultado" value={<Pnl value={b.stats.total_pnl} quote={q} />} sub={`hoje ${b.stats.today_pnl >= 0 ? "+" : ""}${num(b.stats.today_pnl)}`} />
+        <Stat label="Por operação" value={money(b.risk.order_size_quote, q)} />
         <Stat label="Em aberto" value={<Pnl value={b.stats.unrealized_pnl} quote={q} />} />
         <Stat label="Operações" value={b.stats.trades} sub={`acerto ${pct(b.stats.win_rate, false, 0)}`} />
-        <Stat label="Tempo de operação" value={duration(b.runtime_seconds)} sub={b.started_at ? `ligado há ${duration((Date.now() - new Date(b.started_at).getTime()) / 1000)}` : "parado"} />
+        <Stat label="Tempo ligado" value={duration(b.runtime_seconds)} sub={running ? "ligado agora" : "desligado"} />
         {b.mode === "paper" ? (
-          <Stat label="Saldo simulado" value={money(b.paper_balance, q)} sub={`inicial ${num(b.paper_initial_balance)}`} />
+          <Stat label="Saldo simulado" value={money(b.paper_balance, q)} sub={`começou com ${num(b.paper_initial_balance)}`} />
         ) : (
           <Stat label="Preço atual" value={num(b.current_price, 6)} sub={q} />
         )}
@@ -205,7 +216,7 @@ export function BotDetailPage() {
             <Loading />
           )}
         </Card>
-        <Card title="Condições da estratégia" action={<span className="text-xs text-muted">último candle fechado</span>}>
+        <Card title="O que o robô está esperando" action={<span className="text-xs text-muted">último candle</span>}>
           <ChecksList snapshot={chart.data?.preview ?? b.last_signal} quote={q} market={b.last_signal?.market} />
         </Card>
       </div>
@@ -224,22 +235,18 @@ export function BotDetailPage() {
               onChange={setTab}
               tabs={[
                 { value: "trades", label: "Operações" },
-                { value: "orders", label: "Ordens" },
-                { value: "events", label: "Eventos" },
+                { value: "events", label: "Atividade" },
               ]}
             />
           </div>
           <div className="max-h-[520px] overflow-y-auto p-4">
             {tab === "trades" && <PositionsTable positions={positions.data ?? []} quote={q} />}
-            {tab === "orders" && <OrdersTable orders={orders.data ?? []} quote={q} />}
             {tab === "events" && <EventsList events={events.data ?? []} />}
           </div>
         </Card>
         <div className="space-y-4">
-          <AutopilotMini botId={b.id} />
-          <Card title="Configuração">
-            <ConfigSummary bot={b} />
-          </Card>
+          <AutopilotCard botId={b.id} live={b.mode === "live"} />
+          <TechnicalDetails bot={b} />
         </div>
       </div>
 
@@ -258,6 +265,7 @@ export function BotDetailPage() {
           }}
         />
       )}
+      {editing && <EditModal bot={b} onClose={() => setEditing(false)} />}
     </>
   );
 }

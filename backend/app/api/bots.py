@@ -35,8 +35,7 @@ def list_bots(user: User = Depends(get_current_user), db: Session = Depends(get_
     return [bot_summary(db, b) for b in bots]
 
 
-@router.post("")
-def create_bot(body: BotIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_bot_record(db: Session, user: User, body: BotIn) -> Bot:
     rules = _rules(db, user.id, body.mode, body.symbol)
     strategy = get_strategy(body.strategy)
     bot = Bot(
@@ -60,7 +59,21 @@ def create_bot(body: BotIn, user: User = Depends(get_current_user), db: Session 
     db.flush()
     add_event(db, bot.id, "info", f"Bot criado ({strategy.name}, {bot.symbol} {bot.interval}).")
     db.commit()
-    return bot_summary(db, bot)
+    return bot
+
+
+def start_bot_record(db: Session, bot: Bot) -> None:
+    _require_live_ready(db, bot)
+    bot.status = "running"
+    bot.status_reason = ""
+    bot.last_error = ""
+    db.commit()
+    manager.start_bot(bot.id)
+
+
+@router.post("")
+def create_bot(body: BotIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return bot_summary(db, create_bot_record(db, user, body))
 
 
 @router.get("/{bot_id}")
@@ -110,12 +123,7 @@ def delete_bot(bot: Bot = Depends(get_user_bot), db: Session = Depends(get_db)):
 
 @router.post("/{bot_id}/start")
 def start_bot(bot: Bot = Depends(get_user_bot), db: Session = Depends(get_db)):
-    _require_live_ready(db, bot)
-    bot.status = "running"
-    bot.status_reason = ""
-    bot.last_error = ""
-    db.commit()
-    manager.start_bot(bot.id)
+    start_bot_record(db, bot)
     return bot_summary(db, bot)
 
 

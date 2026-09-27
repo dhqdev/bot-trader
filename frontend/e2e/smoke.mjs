@@ -37,7 +37,7 @@ async function login(page) {
 }
 
 async function ensureBot(page) {
-  // cria um bot simulado pela API (precisa da OKX; sem acesso, os passos do bot são pulados)
+  // cria um robô simulado pela API (precisa da OKX; sem acesso, os passos do robô são pulados)
   return page.evaluate(async () => {
     const list = await (await fetch("/api/bots", { credentials: "include" })).json();
     if (Array.isArray(list) && list.length) return list[0].name;
@@ -49,6 +49,46 @@ async function ensureBot(page) {
     });
     return res.ok ? (await res.json()).name : null;
   });
+}
+
+// Novo robô: moeda -> valor -> volatilidade -> ranking. O ranking baixa o histórico
+// da OKX; sem acesso (ex.: no CI) os passos que dependem dela são pulados.
+async function newRobot(page, errors, label) {
+  await page.getByRole("button", { name: "Novo robô" }).first().click();
+  await page.waitForSelector('h1:has-text("Novo robô")');
+  await assertHealthy(page, errors, `${label} novo robô / moeda`);
+  await page.getByLabel("Buscar moeda").fill("BTC");
+  const choose = page.getByRole("button", { name: "Escolher", exact: true });
+  try {
+    await choose.and(page.locator(":enabled")).waitFor({ timeout: 20000 });
+  } catch {
+    console.log(`  (${label}) sem acesso à OKX: escolha de moeda pulada`);
+    return;
+  }
+  await choose.click();
+  await page.getByRole("button", { name: "Continuar" }).waitFor();
+  await page.getByRole("button", { name: "250 USDT" }).click();
+  await assertHealthy(page, errors, `${label} novo robô / valor`);
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await page.getByRole("button", { name: /^Baixa/ }).click();
+  const ranked = page.getByText(/robôs testados em BTC/);
+  try {
+    await ranked.or(page.getByRole("button", { name: "Tentar de novo" })).first().waitFor({ timeout: 150000 });
+  } catch {
+    /* segue para a verificação abaixo */
+  }
+  if (!(await ranked.count())) {
+    await assertHealthy(page, errors, `${label} novo robô / ranking`);
+    console.log(`  (${label}) ranking indisponível (sem acesso ao histórico da OKX): passos seguintes pulados`);
+    return;
+  }
+  await page.getByRole("button", { name: /como ele se saiu/ }).first().click();
+  await page.waitForTimeout(500);
+  await assertHealthy(page, errors, `${label} novo robô / ranking`);
+  await page.getByRole("button", { name: "Usar", exact: true }).first().click();
+  await page.getByRole("dialog").getByRole("button", { name: "Dinheiro real" }).click();
+  await assertHealthy(page, errors, `${label} novo robô / criar`);
+  await page.getByRole("dialog").getByRole("button", { name: "Cancelar" }).click();
 }
 
 async function tour(browser, { label, viewport, navSelector, names }) {
@@ -75,44 +115,31 @@ async function tour(browser, { label, viewport, navSelector, names }) {
     await assertHealthy(page, errors, `${label} ${heading}`);
   };
 
-  await go("bots", "Bots");
+  await go("bots", "Robôs");
   if (botName) {
     await page.getByText(botName, { exact: true }).first().click();
     await page.waitForSelector(`h1:has-text("${botName}")`, { timeout: 15000 });
     await page.waitForTimeout(1500); // gráfico e condições carregam
-    await assertHealthy(page, errors, `${label} detalhe do bot`);
-    await go("bots", "Bots");
+    await assertHealthy(page, errors, `${label} detalhe do robô`);
+    await page.getByRole("button", { name: "Detalhes técnicos" }).click();
+    await page.getByRole("button", { name: "Editar" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Cancelar" }).click();
+    await page.getByRole("button", { name: "Atividade" }).click();
+    await assertHealthy(page, errors, `${label} detalhe do robô / editar e atividade`);
+    await go("bots", "Robôs");
   } else {
-    console.log(`  (${label}) sem acesso à OKX: passos do detalhe do bot pulados`);
+    console.log(`  (${label}) sem acesso à OKX: passos do detalhe do robô pulados`);
   }
 
-  await page.getByRole("button", { name: "Novo bot" }).click();
-  await page.waitForSelector('h1:has-text("Novo bot")');
-  for (const tier of ["Rápido · minutos", "Médio · horas", "Lento · dias"]) {
-    await page.getByRole("button", { name: tier }).click();
-    await page.getByRole("button", { name: "Usar", exact: true }).first().click();
-    await assertHealthy(page, errors, `${label} novo bot / ${tier}`);
-  }
+  await newRobot(page, errors, label);
 
-  await go("lab", "Laboratório");
-  await page.getByRole("button", { name: "Médio · horas" }).click();
-  await page.getByRole("button", { name: "Usar", exact: true }).first().click();
-  await page.getByRole("button", { name: "Como usar o laboratório" }).click();
-  await assertHealthy(page, errors, `${label} laboratório / perfil`);
-
-  await go("ai", "Análise com IA");
-  for (const tab of ["Piloto automático", "Notícias e sentimento", "Conversa"]) {
-    await page.locator('nav[aria-label="Seções da IA"]').getByRole("link", { name: tab, exact: true }).click();
-    await page.waitForTimeout(800);
-    await assertHealthy(page, errors, `${label} IA / ${tab}`);
-  }
   await go("settings", "Configurações");
   await page.getByText("Segurança da conta").first().waitFor({ timeout: 15000 });
   await assertHealthy(page, errors, `${label} configurações / segurança`);
   await go("dashboard", "Painel");
 
   // troca rápida entre telas e voltar/avançar do navegador
-  for (const [key, heading] of [["bots", "Bots"], ["lab", "Laboratório"], ["ai", "Análise com IA"], ["dashboard", "Painel"]]) await go(key, heading);
+  for (const [key, heading] of [["bots", "Robôs"], ["settings", "Configurações"], ["dashboard", "Painel"], ["bots", "Robôs"]]) await go(key, heading);
   await page.goBack();
   await page.goBack();
   await page.goForward();
@@ -133,13 +160,13 @@ try {
     label: "computador",
     viewport: { width: 1366, height: 900 },
     navSelector: "aside nav",
-    names: { dashboard: "Painel", bots: "Bots", lab: "Laboratório", ai: "Análise IA", settings: "Configurações" },
+    names: { dashboard: "Painel", bots: "Robôs", settings: "Configurações" },
   });
   await run({
     label: "celular",
     viewport: { width: 390, height: 844 },
     navSelector: 'nav[aria-label="Navegação principal"]',
-    names: { dashboard: "Painel", bots: "Bots", lab: "Lab", ai: "IA", settings: "Ajustes" },
+    names: { dashboard: "Painel", bots: "Robôs", settings: "Ajustes" },
   });
 } finally {
   await browser.close();

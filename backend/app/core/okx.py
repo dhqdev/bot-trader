@@ -16,8 +16,10 @@ import hmac
 import json
 import logging
 import secrets
+import math
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
@@ -235,23 +237,48 @@ class OkxMarketData:
         if bar is None:
             raise ValueError(f"A OKX não tem candles de {interval}. Use: {', '.join(BARS)}.")
         inst_id = self.inst_id(symbol)
+        step = interval_ms(interval)
         wanted = limit + (1 if closed_only and before is None else 0)
         rows: list = []
         seen: set[int] = set()
-        endpoint, page, after = "/api/v5/market/candles", 300, before
+
+        def add(batch: list) -> list:
+            fresh = [r for r in batch if int(r[0]) not in seen]
+            seen.update(int(r[0]) for r in fresh)
+            rows.extend(fresh)
+            return fresh
+
+        def history_page(after_ms: int) -> list:
+            params = {"instId": inst_id, "bar": bar, "limit": "100", "after": str(after_ms)}
+            return self.client.public("/api/v5/market/history-candles", params)
+
+        # 1) os ~1440 candles mais recentes, 300 por vez
+        after = before
         while len(rows) < wanted:
-            params = {"instId": inst_id, "bar": bar, "limit": str(page)}
+            params = {"instId": inst_id, "bar": bar, "limit": "300"}
             if after is not None:
                 params["after"] = str(after)
-            batch = [r for r in self.client.public(endpoint, params) if int(r[0]) not in seen]
-            if not batch:
-                if endpoint == "/api/v5/market/candles":
-                    endpoint, page = "/api/v5/market/history-candles", 100
-                    continue
+            fresh = add(self.client.public("/api/v5/market/candles", params))
+            if not fresh:
                 break
-            seen.update(int(r[0]) for r in batch)
-            rows.extend(batch)
-            after = min(int(r[0]) for r in batch)
+            after = min(int(r[0]) for r in fresh)
+
+        # 2) histórico, 100 por vez. Os candles têm espaçamento fixo, então o início de
+        #    cada página é previsível e dá para pedir várias em paralelo (respeitando o
+        #    limite da OKX). Se houver buraco, as páginas se sobrepõem, nunca deixam falha.
+        missing = wanted - len(rows)
+        if missing > 0:
+            start = after if after is not None else (before if before is not None else now_ms())
+            afters = [start - k * 100 * step for k in range(math.ceil(missing / 100) + 1)]
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                for batch in pool.map(history_page, afters):
+                    add(batch)
+            oldest = min(seen) if seen else None
+            while len(rows) < wanted and oldest is not None:  # buracos no histórico: completa em sequência
+                fresh = add(history_page(oldest))
+                if not fresh:
+                    break
+                oldest = min(int(r[0]) for r in fresh)
         return candles_to_df(rows, interval, closed_only).tail(limit).reset_index(drop=True)
 
     def price(self, symbol: str) -> float:
@@ -267,6 +294,19 @@ class OkxMarketData:
             "low": _num(t.get("low24h")),
             "quote_volume": _num(t.get("volCcy24h")),
         }
+
+    def tickers(self) -> dict[str, dict]:
+        """Preço, variação em 24 h e volume em 24 h (na moeda de cotação) de todos os pares Spot."""
+        out = {}
+        for t in self.client.public("/api/v5/market/tickers", {"instType": "SPOT"}):
+            inst = t.get("instId") or ""
+            last, open_ = _num(t.get("last")), _num(t.get("open24h"))
+            out[inst.replace("-", "")] = {
+                "price": last,
+                "change_pct": (last / open_ - 1) * 100 if open_ else 0.0,
+                "quote_volume": _num(t.get("volCcy24h")),
+            }
+        return out
 
     def prices(self) -> dict[str, float]:
         data = self.client.public("/api/v5/market/tickers", {"instType": "SPOT"})

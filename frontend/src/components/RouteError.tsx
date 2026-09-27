@@ -2,7 +2,7 @@ import { AlertTriangle } from "lucide-react";
 import { isRouteErrorResponse, Link, useRouteError } from "react-router";
 import { Button } from "./ui";
 
-/** Tela de erro amigável: os bots continuam no servidor, só a tela falhou. */
+/** Tela de erro amigável: os robôs continuam no servidor, só a tela falhou. */
 export function RouteError({ standalone = false }: { standalone?: boolean }) {
   const error = useRouteError();
   const detail = isRouteErrorResponse(error)
@@ -17,7 +17,7 @@ export function RouteError({ standalone = false }: { standalone?: boolean }) {
           <AlertTriangle className="size-5 text-warn-text" /> Esta tela encontrou um erro
         </h1>
         <p className="text-ink-2">
-          Os bots continuam rodando normalmente no servidor; só a exibição desta tela falhou. Recarregue a página. Se o erro continuar, me envie a mensagem abaixo.
+          Os robôs continuam rodando normalmente no servidor; só a exibição desta tela falhou. Recarregue a página. Se o erro continuar, me envie a mensagem abaixo.
         </p>
         <pre className="overflow-x-auto rounded-lg bg-surface-2 p-2 text-xs whitespace-pre-wrap text-muted">{detail}</pre>
         <div className="flex flex-wrap gap-2">

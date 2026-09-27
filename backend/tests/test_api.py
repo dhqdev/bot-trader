@@ -122,9 +122,8 @@ def test_system_engine_toggle(client):
     assert client.post("/api/system/engine", json={"enabled": True}).json()["engine_enabled"] is True
 
 
-def test_ai_requires_key(client):
-    r = client.post("/api/ai/chat", json={"messages": [{"role": "user", "content": "oi"}]})
-    assert r.status_code == 400
+def test_ai_status_without_key(client):
+    assert client.get("/api/ai/status").json()["configured"] is False
 
 
 def test_pwa_files_are_served(client, tmp_path, monkeypatch):

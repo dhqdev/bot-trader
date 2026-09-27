@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Bot, Download, FlaskConical, LayoutDashboard, LogOut, Moon, Power, RefreshCw, Settings, Sparkles, Sun, WifiOff } from "lucide-react";
+import { Bot, Download, LayoutDashboard, LogOut, Moon, Power, RefreshCw, Settings, Sun, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { api } from "../lib/api";
@@ -12,9 +12,7 @@ import { Confirm } from "./ui";
 
 const NAV = [
   { to: "/", label: "Painel", short: "Painel", icon: LayoutDashboard, end: true },
-  { to: "/bots", label: "Bots", short: "Bots", icon: Bot },
-  { to: "/lab", label: "Laboratório", short: "Lab", icon: FlaskConical },
-  { to: "/ai", label: "Análise IA", short: "IA", icon: Sparkles },
+  { to: "/bots", label: "Robôs", short: "Robôs", icon: Bot },
   { to: "/settings", label: "Configurações", short: "Ajustes", icon: Settings },
 ];
 
@@ -68,7 +66,7 @@ function EngineSwitch() {
         <span className="hidden sm:inline">{on ? "Sistema ligado" : "Sistema desligado"}</span>
         {on && (
           <span className="hidden text-muted sm:inline">
-            · {data.running_bots}/{data.total_bots} bots · {duration(data.uptime_seconds)}
+            · {data.running_bots}/{data.total_bots} robôs · {duration(data.uptime_seconds)}
           </span>
         )}
       </button>
@@ -77,8 +75,8 @@ function EngineSwitch() {
         title="Desligar o sistema?"
         message={
           <>
-            Todos os bots param de operar, inclusive o monitoramento de stop das posições abertas. As posições{" "}
-            <strong>não</strong> são vendidas. Ao religar, os bots que estavam ativos voltam a rodar.
+            Todos os robôs param de operar, inclusive o acompanhamento de stop das posições abertas. As posições{" "}
+            <strong>não</strong> são vendidas. Ao religar, os robôs que estavam ligados voltam a rodar.
           </>
         }
         confirmLabel="Desligar"
@@ -101,7 +99,7 @@ function Banners() {
     <div className="border-b border-line bg-surface-2 px-4 py-2 text-xs sm:px-6">
       {!online ? (
         <span className="flex items-center gap-2 text-warn-text">
-          <WifiOff className="size-3.5" /> Sem conexão. Os dados mostrados podem estar desatualizados; os bots continuam rodando no servidor.
+          <WifiOff className="size-3.5" /> Sem conexão. Os dados mostrados podem estar desatualizados; os robôs continuam rodando no servidor.
         </span>
       ) : (
         <button onClick={() => window.location.reload()} className="flex items-center gap-2 text-accent">
@@ -199,7 +197,7 @@ export function Layout() {
         className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
         aria-label="Navegação principal"
       >
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-3">
           {NAV.map(({ to, short, icon: Icon, end }) => (
             <NavLink
               key={to}

@@ -158,18 +158,24 @@ class BacktestIn(BaseModel):
         return v.strip().upper().replace("/", "")
 
 
-class ChatMessage(BaseModel):
-    role: Literal["user", "assistant"]
-    content: str = Field(max_length=40_000)
+def normalize_symbol(v: str) -> str:
+    return v.strip().upper().replace("/", "").replace("-", "")
 
 
-class ChatContext(BaseModel):
-    bot_id: int | None = None
-    backtest: dict | None = None  # resumo de um backtest exibido na tela
+class RankIn(BaseModel):
+    symbol: str = Field(min_length=4, max_length=32)
+    level: Literal["baixa", "media", "alta"]
+    amount: float = Field(100.0, ge=5, le=10_000_000)
+    refresh: bool = False
+
+    @field_validator("symbol")
+    @classmethod
+    def _symbol(cls, v: str) -> str:
+        return normalize_symbol(v)
 
 
-class ChatIn(BaseModel):
-    messages: list[ChatMessage] = Field(min_length=1, max_length=60)
-    context: ChatContext = Field(default_factory=ChatContext)
-    save_report: bool = False
-    title: str = Field("", max_length=200)
+class CreateRobotIn(RankIn):
+    robot_key: str = Field(min_length=3, max_length=64)
+    mode: Literal["paper", "live"] = "paper"
+    start: bool = True
+    name: str = Field("", max_length=120)

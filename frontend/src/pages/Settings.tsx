@@ -241,10 +241,10 @@ function AIProviderCard({ creds }: { creds: Credentials }) {
       <div className="space-y-3 text-sm text-ink-2">
         {creds.ai.active ? (
           <p>
-            Em uso: <strong className="text-ink">{creds.ai.active_label}</strong>, na conversa, na leitura das notícias e no piloto automático.
+            Em uso: <strong className="text-ink">{creds.ai.active_label}</strong>. Ela recomenda o melhor robô para cada moeda, lê as notícias e ajusta os robôs sozinha.
           </p>
         ) : (
-          <p>Cadastre a chave do <strong className="text-ink">Claude</strong> (Anthropic) ou do <strong className="text-ink">GPT</strong> (OpenAI) abaixo para ligar a análise com IA. Pode ser qualquer uma das duas, ou as duas.</p>
+          <p>Cadastre a chave do <strong className="text-ink">Claude</strong> (Anthropic) ou do <strong className="text-ink">GPT</strong> (OpenAI) abaixo para a IA recomendar robôs, ler as notícias e ajustar os robôs. Pode ser qualquer uma das duas, ou as duas. Sem chave, o sistema recomenda pelo resultado dos testes.</p>
         )}
         {both && creds.ai.active && (
           <div className="flex flex-wrap items-center gap-3">
@@ -379,7 +379,7 @@ function AnthropicCard({ creds, twoFactor }: { creds: Credentials["anthropic"]; 
         </form>
         <ErrorBox error={save.error ?? remove.error} />
         <p className="text-xs text-muted">
-          Com a chave, a IA analisa os bots, classifica as notícias e ajuda o piloto automático a melhorar as estratégias. Crie em console.anthropic.com; cada análise consome créditos da sua conta.
+          Com a chave, a IA recomenda o melhor robô, lê as notícias e ajusta os robôs. Crie em console.anthropic.com; cada uso consome créditos da sua conta.
         </p>
       </div>
     </Card>
@@ -579,7 +579,7 @@ function SecurityCard({ status }: { status: SecurityStatus }) {
           ) : (
             <>
               <p className="text-ink-2">
-                Recomendado: com o 2FA, quem descobrir sua senha ainda precisa do seu celular para entrar, trocar as chaves da OKX ou liberar o piloto automático em bots reais.
+                Recomendado: com o 2FA, quem descobrir sua senha ainda precisa do seu celular para entrar, trocar as chaves da OKX ou deixar a IA ajustar robôs com dinheiro real.
               </p>
               <Button size="sm" variant="primary" onClick={() => setModal("setup")}><ShieldCheck className="size-3.5" />Ativar</Button>
             </>
@@ -677,7 +677,7 @@ function InstallCard() {
         <p className="flex gap-2">
           <Smartphone className="mt-0.5 size-4 shrink-0 text-accent" />
           <span>
-            Instale o Bot Trader como app: ícone na tela inicial, abre em tela cheia e carrega mais rápido. Os bots continuam rodando no servidor mesmo com
+            Instale o Bot Trader como app: ícone na tela inicial, abre em tela cheia e carrega mais rápido. Os robôs continuam rodando no servidor mesmo com
             o celular desligado.
           </span>
         </p>

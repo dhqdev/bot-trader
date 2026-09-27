@@ -74,6 +74,20 @@ def autopilot_tick() -> int | None:
     return run_id
 
 
+_prewarm_thread: threading.Thread | None = None
+
+
+def _prewarm() -> None:
+    """Histórico das moedas populares, numa thread à parte (a primeira vez leva alguns minutos)."""
+    global _prewarm_thread
+    from app.services import ranking
+
+    if _prewarm_thread is not None and _prewarm_thread.is_alive():
+        return
+    _prewarm_thread = threading.Thread(target=ranking.prewarm, daemon=True, name="prewarm")
+    _prewarm_thread.start()
+
+
 def _prune() -> None:
     from app.account import prune_events
 
@@ -91,6 +105,7 @@ class Scheduler:
             ("news", 900, _news),
             ("news_ai", 1800, _news_ai),
             ("autopilot", 60, autopilot_tick),
+            ("prewarm", 6 * 3600, _prewarm),
             ("prune", 86400, _prune),
         ]
 

@@ -192,21 +192,6 @@ export interface BotEvent {
   bot_name?: string;
 }
 
-export interface OrderRow {
-  id: number;
-  position_id: number | null;
-  side: "BUY" | "SELL";
-  price: number;
-  qty: number;
-  quote_qty: number;
-  fee_quote: number;
-  reason: string;
-  status: string;
-  exchange_order_id: string;
-  mode: Mode;
-  created_at: string;
-}
-
 export interface Candle {
   time: number;
   open: number;
@@ -317,13 +302,6 @@ export interface Credentials {
 
 export type AIProvider = "anthropic" | "openai";
 
-export interface AIStatus {
-  configured: boolean;
-  provider: AIProvider | null;
-  provider_label: string | null;
-  model: string | null;
-}
-
 export type LoginResult = User | { two_factor_required: true; ticket: string };
 
 export interface SecurityStatus {
@@ -366,12 +344,6 @@ export interface SentimentResponse {
   latest: FearGreed | null;
   history: { date: string; value: number }[];
   filters: Record<SentimentFilter, string>;
-}
-
-export interface NewsStatus {
-  last_fetch: { at: string; added: number; serious?: number; errors: Record<string, string> } | null;
-  last_ai: { at: string; classified: number; model: string } | null;
-  feeds: { name: string; url: string; lang: string }[];
 }
 
 export interface BotAlert {
@@ -489,22 +461,6 @@ export interface OptimizationRun {
   followup?: Followup | null;
 }
 
-export interface AutopilotBot {
-  bot: { id: number; name: string; symbol: string; interval: string; mode: Mode; status: Bot["status"]; strategy: string };
-  autopilot: AutopilotConfig;
-  running: boolean;
-  last_run: OptimizationRun | null;
-  suggestion: OptimizationRun | null;
-  last_applied: (OptimizationRun & { followup: Followup | null }) | null;
-}
-
-export interface AutopilotOverview {
-  bots: AutopilotBot[];
-  ai_configured: boolean;
-  ai_label: string | null;
-  modes: Record<AutopilotMode, string>;
-}
-
 export interface BotAutopilot {
   autopilot: AutopilotConfig;
   running: boolean;
@@ -512,143 +468,93 @@ export interface BotAutopilot {
   suggestion: OptimizationRun | null;
 }
 
-export interface Insight {
-  id: number;
-  bot_id: number | null;
+// ------------------------------------------------------------------ escolha de robô
+
+export type Level = "baixa" | "media" | "alta";
+
+export interface LevelInfo {
+  key: Level;
+  label: string;
+  intervals: string[];
+  days: number;
+  holding: string;
+  description: string;
+}
+
+export interface CoinTicker {
   symbol: string;
+  base: string;
+  name: string;
+  price: number;
+  change_24h_pct: number;
+  volume_usdt: number;
+}
+
+export interface CoinProfile {
+  price?: number;
+  daily_volatility_pct?: number;
+  typical_day_range_pct?: number;
+  return_30d_pct?: number;
+}
+
+export interface CoinInfo extends CoinProfile {
+  symbol: string;
+  base: string;
+  name: string;
+  change_24h_pct: number;
+  wallet: { usdt?: number; coin?: number; error?: string } | null;
+}
+
+export interface RankedRobot {
+  key: string;
+  name: string;
+  strategy: string;
+  strategy_name: string;
+  style: string;
+  description: string;
   interval: string;
-  kind: "lesson" | "warning" | "observation";
-  text: string;
-  source: "ai" | "optimizer";
-  created_at: string;
-}
-
-export interface BacktestTrade {
-  entry_time: number;
-  entry_price: number;
-  exit_time: number;
-  exit_price: number;
-  exit_reason: string;
-  partial_exits: number;
-  cost: number;
-  pnl: number;
-  pnl_pct: number;
-  fees: number;
-  bars: number;
-}
-
-export interface BacktestMetrics {
-  initial_capital: number;
-  final_equity: number;
-  total_return_pct: number;
-  buy_hold_return_pct: number;
-  max_drawdown_pct: number;
-  sharpe: number;
+  return_pct: number;
+  drawdown_pct: number;
   trades: number;
   win_rate_pct: number;
   profit_factor: number | null;
-  avg_trade_pct: number;
-  avg_win_pct: number;
-  avg_loss_pct: number;
-  best_trade_pct: number;
-  worst_trade_pct: number;
-  fees_paid: number;
+  avg_trade_hours: number;
   exposure_pct: number;
-  avg_bars_in_trade: number;
-  exit_reasons: Record<string, number>;
-  bars: number;
-  period_start: number;
-  period_end: number;
-  entries_blocked_by_sentiment?: number;
-  sentiment_filter?: SentimentFilter | "sem dados";
+  recent_return_pct: number;
+  recent_drawdown_pct: number;
+  recent_trades: number;
+  buy_hold_pct: number;
+  curve: { time: number; equity: number; buy_hold: number }[];
+  score: number;
+  eligible: boolean;
+  position: number;
+  final_usdt: number;
+  profit_usdt: number;
+  buy_hold_final_usdt: number;
 }
 
-export interface BacktestRequest {
+export interface Ranking {
   symbol: string;
-  interval: string;
-  strategy: string;
-  params: Record<string, number | boolean | string>;
-  risk: RiskConfig;
+  level: Level;
+  level_label: string;
   days: number;
-  initial_capital: number;
+  periods: Record<string, { start: number; split: number; end: number }>;
+  robots: RankedRobot[];
+  best: string;
+  worst: string;
+  coin: CoinProfile;
+  tested_at: string;
+  amount: number;
 }
 
-export interface BacktestResult {
-  metrics: BacktestMetrics;
-  equity_curve: { time: number; equity: number; buy_hold: number }[];
-  trades: BacktestTrade[];
-  request: BacktestRequest & { strategy_name: string };
-  candles?: Candle[];
-  overlays?: Record<string, LinePoint[]>;
-}
-
-export interface CompareRow {
-  strategy: string;
-  name: string;
-  total_return_pct?: number;
-  buy_hold_return_pct?: number;
-  max_drawdown_pct?: number;
-  sharpe?: number;
-  trades?: number;
-  win_rate_pct?: number;
-  profit_factor?: number | null;
-  exposure_pct?: number;
-  error?: string;
-}
-
-export interface AIReportItem {
-  id: number;
-  title: string;
-  bot_id: number | null;
-  model: string;
-  created_at: string;
-  question?: string;
-  content?: string;
-}
-
-export type AIEvent =
-  | { type: "status"; text: string }
-  | { type: "text"; text: string }
-  | { type: "tool"; name: string; label: string; input: unknown }
-  | { type: "tool_done"; name: string; ok: boolean }
-  | { type: "done"; model?: string; report_id?: number }
-  | { type: "error"; message: string };
-
-export interface ProfileStats {
-  cases: number;
-  period_days: number;
-  median_return_pct: number;
-  profitable_pct: number;
-  avg_drawdown_pct: number;
-  worst_return_pct: number;
-  trades_per_period: number;
-  avg_trade_minutes: number;
-  win_rate_pct: number;
-  buy_hold_median_pct: number;
-  median_return_bnb_pct?: number;
-}
-
-export interface Profile {
-  key: string;
-  tier: "rapido" | "medio" | "lento";
-  name: string;
-  interval: string;
-  strategy: string;
-  strategy_name: string;
-  params: Record<string, number | boolean | string>;
-  risk: RiskConfig;
-  description: string;
-  recommended: boolean;
-  stats: ProfileStats;
-}
-
-export interface Tier {
-  key: "rapido" | "medio" | "lento";
-  name: string;
-  risk: "Alto" | "Médio" | "Baixo";
-  holding: string;
-  timeframes: string;
-  description: string;
-  warning: string | null;
-  profiles: Profile[];
+export interface Advice {
+  recommended_key: string;
+  headline: string;
+  why: string;
+  watch_out: string;
+  confidence: "baixa" | "media" | "alta";
+  source: "ai" | "rules";
+  model?: string;
+  provider?: string;
+  note?: string;
 }
