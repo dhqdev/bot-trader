@@ -29,10 +29,10 @@ log = logging.getLogger("bot_trader.ai")
 MAX_STEPS = 10
 FALLBACK_MODELS = {"claude-opus-5", "claude-opus-5-5", "claude-fable-5", "claude-fable-5-1"}
 
-SYSTEM_PROMPT = """Você é o analista quantitativo do Bot Trader, um sistema pessoal de trading automatizado na Binance Spot (somente posições compradas, sem alavancagem). Responda sempre em português do Brasil.
+SYSTEM_PROMPT = """Você é o analista quantitativo do Bot Trader, um sistema pessoal de trading automatizado na OKX Spot (somente posições compradas, sem alavancagem). Responda sempre em português do Brasil.
 
 Como o sistema funciona:
-- Cada bot opera um par (ex.: SOLUSDT) num intervalo de candle, com uma estratégia e uma configuração de risco.
+- Cada bot opera um par (ex.: SOLUSDT) num intervalo de candle, com uma estratégia e uma configuração de risco. Preços, ordens e o histórico dos backtests vêm da OKX.
 - A estratégia só é avaliada no fechamento do candle; stop loss, break-even, trailing stop e alvos parciais são checados a cada ~15 segundos com o preço atual.
 - Modos: "paper" (simulado com preços reais, taxa e slippage) e "live" (dinheiro real).
 - O backtest usa exatamente a mesma estratégia e o mesmo gerenciador de risco, executando na abertura do candle seguinte, com taxa de 0,1% e slippage de 0,05%.
@@ -140,7 +140,7 @@ TOOLS = [
     ),
     _tool(
         "get_market_snapshot",
-        "Retrato técnico atual de um par na Binance (ex.: BTCUSDT): regime de tendência, RSI, ADX, ATR%, posição em "
+        "Retrato técnico atual de um par na OKX (ex.: BTCUSDT): regime de tendência, RSI, ADX, ATR%, posição em "
         "relação às EMAs 20/50/200, Supertrend, Bollinger %B e retornos recentes.",
         MarketIn,
     ),
@@ -152,7 +152,7 @@ TOOLS = [
     ),
     _tool(
         "run_backtest",
-        "Roda um backtest realista (taxa, slippage, stop, alvos, trailing) com dados históricos da Binance. `params` "
+        "Roda um backtest realista (taxa, slippage, stop, alvos, trailing) com dados históricos da OKX. `params` "
         "sobrescreve parâmetros da estratégia; `risk` sobrescreve campos da configuração de risco (mesmos nomes da "
         "configuração do bot). Retorna métricas (retorno, drawdown, sharpe, taxa de acerto, profit factor, buy & hold) "
         "e as últimas operações.",
@@ -191,7 +191,7 @@ TOOLS = [
 
 
 def _condensed_bot(summary: dict) -> dict:
-    keep = ("id", "name", "symbol", "interval", "strategy", "strategy_name", "mode", "status", "running", "runtime_seconds")
+    keep = ("id", "name", "symbol", "exchange", "interval", "strategy", "strategy_name", "mode", "status", "running", "runtime_seconds")
     out = {k: summary[k] for k in keep}
     out["stats"] = summary["stats"]
     pos = summary.get("position")
@@ -241,7 +241,7 @@ def _run_tool(user_id: int, name: str, raw_input: dict) -> dict:
             )
             events = db.scalars(select(BotEvent).where(BotEvent.bot_id == bot.id).order_by(BotEvent.id.desc()).limit(20))
             return {
-                **{k: summary[k] for k in ("id", "name", "symbol", "interval", "strategy", "strategy_name", "strategy_params", "risk", "mode", "status", "status_reason", "running", "runtime_seconds", "paper_balance", "paper_initial_balance", "current_price", "stats", "last_error")},
+                **{k: summary[k] for k in ("id", "name", "symbol", "exchange", "interval", "strategy", "strategy_name", "strategy_params", "risk", "mode", "status", "status_reason", "running", "runtime_seconds", "paper_balance", "paper_initial_balance", "current_price", "stats", "last_error")},
                 "open_position": summary["position"],
                 "last_evaluation": summary["last_signal"],
                 "recent_trades": [

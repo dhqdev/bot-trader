@@ -516,7 +516,7 @@ def diagnose(db: Session, bot: Bot) -> dict:
     if ignored["erros"] >= 3:
         add("bad", "errors", f"{ignored['erros']} erros de execução nos últimos 30 dias. Veja os eventos do bot.")
     if ignored["ordem abaixo do mínimo"]:
-        add("warn", "min_notional", "Ordens recusadas por estarem abaixo do mínimo da Binance: aumente o valor por compra.")
+        add("warn", "min_notional", "Ordens recusadas por estarem abaixo do mínimo da OKX: aumente o valor por compra.")
     if ignored["sentimento"]:
         add("info", "sentiment_blocks", f"{ignored['sentimento']} compra(s) evitadas pelo filtro de sentimento nos últimos 30 dias.")
     if ignored["notícia"]:
@@ -555,7 +555,7 @@ def compare_with_backtest(diag: dict, symbol: str, interval: str, strategy: str,
 # IA: analisa os números, registra lições e sugere novas ideias
 
 
-ANALYST_SYSTEM = """Você é o analista quantitativo do piloto automático do Bot Trader (Binance Spot, só compra, sem alavancagem). Responda em português do Brasil.
+ANALYST_SYSTEM = """Você é o analista quantitativo do piloto automático do Bot Trader (OKX Spot, só compra, sem alavancagem). Responda em português do Brasil.
 
 Você recebe, de um bot: configuração, diagnóstico do histórico real, resultado do backtest da configuração atual e das variações testadas pelo otimizador, notícias recentes, o índice de medo e ganância, lições de ciclos anteriores e o que aconteceu depois das mudanças já aplicadas.
 

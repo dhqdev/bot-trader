@@ -1,6 +1,6 @@
 # Bot Trader
 
-Sistema pessoal de trading automatizado na Binance Spot, com painel web: login com verificação em duas etapas, chaves de API criptografadas, bots que você liga e desliga, gráficos de resultado, laboratório de backtest, leitura de notícias e do sentimento do mercado, análise com IA (**Claude ou GPT**, você escolhe) e um **piloto automático** que testa e aplica melhorias nas estratégias sozinho.
+Sistema pessoal de trading automatizado na **OKX** (Spot), com painel web: login com verificação em duas etapas, chaves de API criptografadas, bots que você liga e desliga, gráficos de resultado, laboratório de backtest, leitura de notícias e do sentimento do mercado, análise com IA (**Claude ou GPT**, você escolhe) e um **piloto automático** que testa e aplica melhorias nas estratégias sozinho.
 
 > Uso por sua conta e risco. Nenhuma estratégia garante lucro. Comece sempre em modo **simulado**.
 
@@ -24,7 +24,7 @@ Se o PowerShell bloquear: `powershell -ExecutionPolicy Bypass -File .\start.ps1`
 ### Primeiro uso
 
 1. **Crie sua conta.** O primeiro cadastro vira o dono do sistema; depois disso o cadastro fecha.
-2. **Configurações:** ative a **verificação em duas etapas** e cole as chaves da Binance (e, se quiser a IA, a chave do Claude/Anthropic ou do GPT/OpenAI). Elas são criptografadas no banco e nunca voltam para a tela; chaves da Binance com permissão de saque são recusadas.
+2. **Configurações:** ative a **verificação em duas etapas** e cadastre a chave de API da **OKX** (veja "Chave da OKX" abaixo) e, se quiser a IA, a chave do Claude/Anthropic ou do GPT/OpenAI. Tudo fica criptografado no banco e nunca volta para a tela; chaves da OKX com permissão de saque são recusadas.
 3. **Laboratório:** teste estratégias no par que você quer operar, em candles de 4 horas. Use "Comparar todas as estratégias" e leia a análise automática do resultado.
 4. **Bots → Novo bot**, em modo **Simulado**. Ele usa preços reais, com taxa e slippage, sem gastar dinheiro.
 5. Acompanhe pelo **Painel**. Quando estiver confiante, edite o bot e troque para **Real**.
@@ -41,7 +41,7 @@ O botão **Sistema ligado/desligado**, no topo, para ou retoma todos os bots de 
   - **Conversa:** chat com a IA escolhida (Claude ou GPT). Ela consulta seus bots, o mercado, as notícias, o diagnóstico do piloto e **roda backtests** para embasar as respostas. Só lê dados: não envia ordens nem altera bots. Os relatórios ficam salvos.
   - **Piloto automático:** o que foi diagnosticado, testado e mudado em cada bot, com os botões para aplicar, recusar ou desfazer, e as lições que a IA acumulou.
   - **Notícias e sentimento:** notícias classificadas (moedas afetadas, sentimento, impacto), o Índice de Medo e Ganância e quais bots estão com compras travadas agora.
-- **Configurações:** chaves (com conferência das permissões na Binance), qual IA usar (Claude ou GPT, e o modelo do GPT), verificação em duas etapas, sessões abertas e atividade recente da conta.
+- **Configurações:** chave da OKX (com conferência das permissões na própria OKX e o IP do servidor para vincular), qual IA usar (Claude ou GPT, e o modelo do GPT), verificação em duas etapas, sessões abertas e atividade recente da conta.
 
 ## IA: Claude ou GPT
 
@@ -85,11 +85,11 @@ Ao criar um bot (ou no Laboratório), escolha um **perfil pronto**. Ele preenche
 
 Os números já incluem o **filtro de sentimento** de cada perfil (ver abaixo), medido com o Índice de Medo e Ganância real de cada dia.
 
-**Sobre o nível Rápido:** nos testes, **nenhuma** estratégia de minutos lucrou depois dos custos. Foram 9 estratégias, 3 regras de risco, candles de 5 e 15 minutos e 14 pares. Cada operação paga cerca de 0,3% entre taxa e slippage, e os movimentos de poucos minutos costumam ser menores que isso. Mesmo pagando a taxa com BNB (0,075%), a melhor ficou em −1,2%. O nível existe porque você pode querer testá-lo, mas começa no modo simulado, e usá-lo com dinheiro real exige uma confirmação explícita.
+**Sobre o nível Rápido:** nos testes, **nenhuma** estratégia de minutos lucrou depois dos custos. Foram 9 estratégias, 3 regras de risco, candles de 5 e 15 minutos e 14 pares. Cada operação paga cerca de 0,3% entre taxa e slippage, e os movimentos de poucos minutos costumam ser menores que isso. Mesmo com taxa reduzida (0,075%, como nos níveis VIP), a melhor ficou em −1,2%. O nível existe porque você pode querer testá-lo, mas começa no modo simulado, e usá-lo com dinheiro real exige uma confirmação explícita.
 
 ### Como foram escolhidas (e o que esperar)
 
-Backtests com dados reais da Binance em 14 pares, em candles de 1h (180 dias) e 4h (365 dias), com 3 períodos seguidos (83 casos). Taxa de 0,1%, slippage de 0,05% e o risco padrão.
+Backtests com histórico real de 14 pares (pesquisa feita em set/2026 com o histórico da Binance; os preços na OKX são praticamente iguais: o Squeeze em SOL 4h deu +43,6%/+16,8% num e +44,3%/+16,7% no outro), em candles de 1h (180 dias) e 4h (365 dias), com 3 períodos seguidos (83 casos). Taxa de 0,1%, slippage de 0,05% e o risco padrão.
 
 - **Design:** 7 pares (BTC, ETH, SOL, BNB, XRP, LINK, ADA) nos 2 períodos mais recentes. Foram testadas 14 ideias novas (KAMA, Squeeze, RSI(2), regressão linear, Ichimoku, Heikin-Ashi, momentum/volatilidade, OBV, pullback na tendência, candle de ignição, canal ATR, impulso de Elder, Aroon e StochRSI). Ficaram as 3 melhores.
 - **Validação:** 7 pares que não participaram da escolha (DOGE, AVAX, DOT, LTC, TRX, NEAR, JUP), mais o período mais antigo dos 7 primeiros.
@@ -127,6 +127,16 @@ O que isso significa:
 - Stops e alvos são conferidos a cada ~15 s com o preço atual, não só no fechamento do candle.
 - Cada bot só vende o que ele mesmo comprou; ativos que já estão na sua carteira não são tocados.
 
+## Chave da OKX
+
+1. Na OKX (Perfil → **API** → Criar chave de API V5), dê um nome, crie uma **passphrase** (guarde: a OKX pede junto com a chave) e marque só **Leitura** e **Negociação**. **Nunca** marque Saque.
+2. Em "Endereço IP", vincule o IP do servidor, que aparece no cartão da OKX em Configurações. Sem IP vinculado a chave funciona, mas a OKX pode apagar chaves de negociação que ficam muitos dias sem uso.
+3. Deixe a conta no modo **Spot** (a OKX chama de modo de conta "Spot"): o sistema opera sem margem.
+4. No Bot Trader, em Configurações → **OKX**, cole a API key, a Secret key e a passphrase, escolha a região (Brasil = Global) e confirme com sua senha. O sistema confere tudo na OKX antes de salvar.
+5. Para testar sem dinheiro, crie chaves no **Demo Trading** da OKX e marque "Chaves do Demo Trading".
+
+Tudo usa a OKX: preços ao vivo, ordens, saldo, a lista de pares e o histórico dos backtests e do piloto automático. O histórico baixado fica guardado no banco, então só a primeira consulta de cada par demora alguns segundos. Os bots criados antes da mudança (quando o sistema usava a Binance) foram migrados sozinhos: os simulados seguem rodando com preços da OKX; os reais foram desligados para você conferir as chaves e religar.
+
 ## Sentimento do mercado e notícias
 
 **Índice de Medo e Ganância** (alternative.me, diário, de 0 a 100). Testado como filtro de compras em 14 pares, com o valor real de cada dia e sem olhar o futuro:
@@ -141,7 +151,7 @@ Evitar ganância alta e "só entre 25 e 75" foram testados e **descartados** (re
 
 **Notícias:** a cada 15 minutos o sistema lê CoinDesk, Cointelegraph, Decrypt, The Block, CryptoSlate, Livecoins e Portal do Bitcoin, identifica as moedas citadas e classifica sentimento e impacto (por palavras-chave na hora e, com uma chave de IA, pelo Claude ou GPT a cada 30 minutos; notícia que parece grave é revisada pela IA na hora).
 
-- **Trava de compras (padrão):** notícia grave e bem negativa sobre a moeda do bot, ou sobre o mercado todo (ex.: problema na Binance), impede compras por 12 horas. Vale a classificação da IA ou a mesma notícia grave em duas fontes, para evitar alarme falso.
+- **Trava de compras (padrão):** notícia grave e bem negativa sobre a moeda do bot, ou sobre o mercado todo (ex.: problema na OKX), impede compras por 12 horas. Vale a classificação da IA ou a mesma notícia grave em duas fontes, para evitar alarme falso.
 - **Trava + venda (opcional):** também vende a posição se a notícia sair depois da compra e for confirmada pela IA.
 - Notícias boas **não** disparam compras: comprar na euforia da manchete costuma ser comprar no topo. Elas entram na análise da IA.
 - Não existe histórico de manchetes para backtest, então a trava de notícias não aparece nos resultados do Laboratório. O filtro de sentimento aparece.
@@ -211,7 +221,7 @@ docker compose --profile https up -d --build  # HTTPS automático via Caddy (apo
 
 ## Segurança
 
-- **Chaves da Binance:** crie a chave **sem permissão de saque**, com **Spot Trading** e **restrita ao IP do servidor**. Ao salvar, o sistema confere as permissões na própria Binance e **recusa chaves com saque liberado**; avisa se faltar restrição de IP ou se houver permissões desnecessárias (margem, futuros, transferências).
+- **Chave da OKX:** só **Leitura e Negociação**, **nunca Saque**, com o **IP do servidor vinculado**. Ao salvar, o sistema confere as permissões na própria OKX e **recusa chaves com saque**; avisa se faltar o IP vinculado ou se a conta não estiver no modo Spot.
 - **Criptografia:** as chaves ficam criptografadas (Fernet) com uma chave derivada de `BT_SECRET_KEY`; a interface só mostra as pontas (`ABCD••••WXYZ`). A IA nunca recebe chaves.
 - **Verificação em duas etapas (TOTP):** com qualquer app autenticador, com QR code, 10 códigos de recuperação de uso único e proteção contra reuso do mesmo código.
 - **Confirmação de ações sensíveis:** trocar as chaves, desligar o 2FA, gerar códigos de recuperação e liberar o piloto automático em bots reais pedem a senha (e o código de 2 etapas). Quem pegar uma sessão aberta não consegue fazer isso.
@@ -220,7 +230,7 @@ docker compose --profile https up -d --build  # HTTPS automático via Caddy (apo
 - **Proteção do site:** CSP restrita (só scripts do próprio site), HSTS, `X-Frame-Options: DENY`, `Permissions-Policy`, COOP/CORP, bloqueio de requisições que mudam dados vindas de outros sites (inclusive subdomínios), limite de tamanho das requisições e `Cache-Control: no-store` na API.
 - **Registro de atividade:** logins, falhas, trocas de senha e de chaves, 2FA e autorizações ficam registrados com IP e aparelho (Configurações → Atividade recente).
 - **Notícias** vêm de sites externos: o XML é lido com proteção contra ataques (defusedxml) e o texto é tratado como dado, nunca como instrução para a IA. As ideias da IA passam pelos limites dos parâmetros e pelos mesmos testes de qualquer mudança.
-- O arquivo `.env` antigo na raiz ainda tem suas chaves em texto puro. Depois de cadastrá-las pela interface, **apague esse arquivo** (ou gere chaves novas na Binance).
+- O arquivo `.env` antigo na raiz ainda tem suas chaves em texto puro. Depois de cadastrá-las pela interface, **apague esse arquivo**. A Binance não é mais usada: apague também as chaves de API antigas no site da Binance.
 
 ## Estrutura
 

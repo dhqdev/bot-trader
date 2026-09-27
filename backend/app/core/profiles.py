@@ -2,7 +2,7 @@
 
 Cada perfil é uma combinação de estratégia + tempo de candle + regras de risco
 + filtro de sentimento. Os números foram medidos em backtest (set/2026) com o
-código de produção, dados reais da Binance em 14 pares (BTC, ETH, SOL, BNB,
+código de produção, histórico real de 14 pares (BTC, ETH, SOL, BNB,
 XRP, LINK, ADA, DOGE, AVAX, DOT, LTC, TRX, NEAR, JUP), taxa de 0,1% e slippage
 de 0,05% por ordem, com 100% do capital em cada operação e o Índice de Medo e
 Ganância real de cada dia. Resultado passado não garante o futuro.
@@ -46,7 +46,7 @@ TIERS = [
         "warning": (
             "Experimental. Nos testes, todas as estratégias de minutos perderam dinheiro depois das taxas: "
             "cada operação custa cerca de 0,3% entre taxa e slippage, mais do que costumam render movimentos "
-            "tão curtos. Pagar a taxa com BNB reduz a perda, mas não a elimina. Use no modo simulado."
+            "tão curtos. Taxas menores (níveis VIP da corretora) reduzem a perda, mas não a eliminam. Use no modo simulado."
         ),
     },
     {

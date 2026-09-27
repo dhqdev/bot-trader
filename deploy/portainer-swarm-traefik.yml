@@ -11,7 +11,7 @@ services:
     image: ghcr.io/dhqdev/bot-trader:latest
     environment:
       # --- Segurança (TROCAR OBRIGATORIAMENTE) ---
-      # Criptografa as chaves da Binance/Anthropic salvas no sistema e assina o login.
+      # Criptografa as chaves (OKX, Anthropic, OpenAI) salvas no sistema e assina o login.
       # Se mudar depois, as chaves precisam ser cadastradas de novo.
       - BT_SECRET_KEY=TROQUE_POR_UMA_CHAVE_ALEATORIA_COM_48_CARACTERES
 

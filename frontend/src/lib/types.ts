@@ -270,7 +270,17 @@ export interface SystemInfo {
   version: string;
 }
 
+export interface Wallet {
+  exchange: "okx";
+  label: string;
+  testnet: boolean;
+  total_usdt: number | null;
+  assets: { asset: string; total: number; value_usdt: number | null }[];
+  error: string | null;
+}
+
 export interface KeyPermissions {
+  account_mode?: string;
   reading: boolean;
   spot_trading: boolean;
   withdrawals: boolean;
@@ -282,14 +292,16 @@ export interface KeyPermissions {
 }
 
 export interface Credentials {
-  binance: {
+  okx: {
     configured: boolean;
     api_key: string | null;
-    testnet: boolean;
+    demo: boolean;
+    region: string | null;
     updated_at: string | null;
     permissions: KeyPermissions | null;
     warnings: string[];
     checked_at: string | null;
+    regions: Record<string, string>;
   };
   anthropic: { configured: boolean; api_key: string | null; source: "db" | "env" | null; model: string };
   openai: {

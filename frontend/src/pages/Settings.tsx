@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Copy, Download, KeyRound, LogOut, ShieldAlert, ShieldCheck, Smartphone, XCircle } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Badge, Button, Card, ErrorBox, Field, Input, Loading, Modal, PageHeader, Segmented, Select, Switch } from "../components/ui";
 import { api } from "../lib/api";
 import { dateTime, num, timeAgo } from "../lib/format";
@@ -44,26 +44,6 @@ function StepUpFields({ password, code, onPassword, onCode, twoFactor }: {
   );
 }
 
-function PermissionList({ perms }: { perms: KeyPermissions }) {
-  const rows: { label: string; ok: boolean; text: string }[] = [
-    { label: "Saque", ok: !perms.withdrawals, text: perms.withdrawals ? "liberado (recusado)" : "bloqueado" },
-    { label: "Spot Trading", ok: perms.spot_trading, text: perms.spot_trading ? "liberado" : "desligado" },
-    { label: "Restrição de IP", ok: perms.ip_restricted, text: perms.ip_restricted ? "ativa" : "qualquer IP" },
-    { label: "Transferências", ok: !perms.internal_transfer && !perms.universal_transfer, text: perms.internal_transfer || perms.universal_transfer ? "liberadas" : "bloqueadas" },
-    { label: "Margem/futuros", ok: !perms.margin && !perms.futures, text: perms.margin || perms.futures ? "liberados" : "bloqueados" },
-  ];
-  return (
-    <ul className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
-      {rows.map((r) => (
-        <li key={r.label} className="flex items-center gap-1.5">
-          {r.ok ? <CheckCircle2 className="size-3.5 text-good-text" aria-label="ok" /> : <AlertTriangle className="size-3.5 text-warn-text" aria-label="atenção" />}
-          <span className="text-ink-2">{r.label}:</span> <span className="text-ink">{r.text}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function Warnings({ items }: { items: string[] }) {
   if (!items.length) return null;
   return (
@@ -77,59 +57,100 @@ function Warnings({ items }: { items: string[] }) {
   );
 }
 
-function BinanceCard({ creds, twoFactor }: { creds: Credentials["binance"]; twoFactor: boolean }) {
+function useServerIp() {
+  return useQuery({ queryKey: ["server-ip"], queryFn: () => api.get<{ ip: string | null }>("/settings/server-ip"), staleTime: 3_600_000 });
+}
+
+function ServerIp() {
+  const { data } = useServerIp();
+  const [copied, setCopied] = useState(false);
+  if (!data?.ip) return null;
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-2">
+      IP do servidor para vincular à chave: <code className="rounded bg-page px-1.5 py-0.5 text-ink">{data.ip}</code>
+      <button
+        type="button"
+        className="text-accent hover:underline"
+        onClick={() => {
+          void navigator.clipboard?.writeText(data.ip ?? "").then(() => setCopied(true));
+        }}
+      >
+        {copied ? "copiado" : "copiar"}
+      </button>
+    </span>
+  );
+}
+
+function OkxPermissionList({ perms }: { perms: KeyPermissions }) {
+  const rows: { label: string; ok: boolean; text: string }[] = [
+    { label: "Saque", ok: !perms.withdrawals, text: perms.withdrawals ? "liberado (recusado)" : "bloqueado" },
+    { label: "Negociação", ok: perms.spot_trading, text: perms.spot_trading ? "liberada" : "desligada" },
+    { label: "IP vinculado", ok: perms.ip_restricted, text: perms.ip_restricted ? "sim" : "não (qualquer IP)" },
+    { label: "Modo da conta", ok: !perms.account_mode || perms.account_mode === "Spot (simples)", text: perms.account_mode ?? "–" },
+  ];
+  return (
+    <ul className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
+      {rows.map((r) => (
+        <li key={r.label} className="flex items-center gap-1.5">
+          {r.ok ? <CheckCircle2 className="size-3.5 text-good-text" aria-label="ok" /> : <AlertTriangle className="size-3.5 text-warn-text" aria-label="atenção" />}
+          <span className="text-ink-2">{r.label}:</span> <span className="text-ink">{r.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OkxCard({ creds, twoFactor }: { creds: Credentials["okx"]; twoFactor: boolean }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(!creds.configured);
   const [key, setKey] = useState("");
   const [secret, setSecret] = useState("");
-  const [testnet, setTestnet] = useState(creds.testnet);
+  const [passphrase, setPassphrase] = useState("");
+  const [demo, setDemo] = useState(creds.demo);
+  const [region, setRegion] = useState(creds.region ?? "global");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
-
+  const invalidate = () => {
+    for (const k of ["credentials", "balance", "security-events"]) qc.invalidateQueries({ queryKey: [k] });
+  };
   const save = useMutation({
-    mutationFn: () => api.put<{ ok: boolean; warnings: string[] }>("/settings/binance", { api_key: key, api_secret: secret, testnet, password, code: code || null }),
+    mutationFn: () =>
+      api.put<{ ok: boolean; warnings: string[] }>("/settings/okx", { api_key: key, api_secret: secret, passphrase, demo, region, password, code: code || null }),
     onSuccess: () => {
       setKey("");
       setSecret("");
+      setPassphrase("");
       setPassword("");
       setCode("");
       setEditing(false);
-      qc.invalidateQueries({ queryKey: ["credentials"] });
-      qc.invalidateQueries({ queryKey: ["security-events"] });
+      invalidate();
     },
   });
   const remove = useMutation({
-    mutationFn: () => api.del("/settings/binance"),
+    mutationFn: () => api.del("/settings/okx"),
     onSuccess: () => {
       setEditing(true);
-      qc.invalidateQueries({ queryKey: ["credentials"] });
+      invalidate();
     },
   });
-  const test = useMutation({
-    mutationFn: () => api.post<TestResult>("/settings/binance/test"),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["credentials"] }),
-  });
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    save.mutate();
-  }
-
+  const test = useMutation({ mutationFn: () => api.post<TestResult>("/settings/okx/test"), onSuccess: invalidate });
   const perms = test.data?.key_permissions ?? creds.permissions;
   const warnings = test.data?.warnings ?? creds.warnings ?? [];
   return (
-    <Card title="Binance" action={creds.configured ? <Badge tone="good"><CheckCircle2 className="size-3" />Conectada{creds.testnet ? " (testnet)" : ""}</Badge> : <Badge>Não configurada</Badge>}>
+    <Card title="OKX" action={creds.configured ? <Badge tone="good"><CheckCircle2 className="size-3" />Conectada{creds.demo ? " (demo)" : ""}</Badge> : <Badge>Não configurada</Badge>}>
       {creds.configured && !editing ? (
         <div className="space-y-4">
           <div className="text-sm">
             <div className="text-ink-2">API key</div>
             <div className="font-mono text-ink">{creds.api_key}</div>
-            <div className="mt-1 text-xs text-muted">Atualizada em {dateTime(creds.updated_at)} · o segredo nunca é exibido</div>
+            <div className="mt-1 text-xs text-muted">
+              {creds.regions[creds.region ?? "global"] ?? creds.region} · atualizada em {dateTime(creds.updated_at)} · segredo e passphrase nunca são exibidos
+            </div>
           </div>
           {perms && (
             <div className="space-y-2">
               <div className="text-xs font-medium text-ink-2">Permissões da chave{creds.checked_at ? ` (conferidas ${timeAgo(creds.checked_at)})` : ""}</div>
-              <PermissionList perms={perms} />
+              <OkxPermissionList perms={perms} />
             </div>
           )}
           <Warnings items={warnings} />
@@ -142,7 +163,7 @@ function BinanceCard({ creds, twoFactor }: { creds: Credentials["binance"]; twoF
           {test.data && (
             <div className="rounded-lg border border-line p-3 text-sm">
               <div className="flex flex-wrap gap-2">
-                <Badge tone={test.data.can_trade ? "good" : "bad"}>{test.data.can_trade ? "Pode negociar" : "Sem permissão de trade"}</Badge>
+                <Badge tone={test.data.can_trade ? "good" : "bad"}>{test.data.can_trade ? "Pode negociar" : "Sem permissão de negociação"}</Badge>
                 <Badge>{test.data.account_type}</Badge>
               </div>
               {test.data.balances.length > 0 && (
@@ -156,14 +177,32 @@ function BinanceCard({ creds, twoFactor }: { creds: Credentials["binance"]; twoF
           )}
         </div>
       ) : (
-        <form onSubmit={submit} className="space-y-3">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            save.mutate();
+          }}
+          className="space-y-3"
+        >
           <Field label="API key">
             <Input value={key} onChange={(e) => setKey(e.target.value)} required autoComplete="off" spellCheck={false} />
           </Field>
-          <Field label="Secret key">
-            <Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} required autoComplete="new-password" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Secret key">
+              <Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} required autoComplete="new-password" />
+            </Field>
+            <Field label="Passphrase" help="A senha que você criou junto com a chave na OKX.">
+              <Input type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} required autoComplete="new-password" />
+            </Field>
+          </div>
+          <Field label="Região da conta" help="O domínio onde você criou a conta. Brasil: Global.">
+            <Select value={region} onChange={(e) => setRegion(e.target.value)}>
+              {Object.entries(creds.regions).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </Select>
           </Field>
-          <Switch checked={testnet} onChange={setTestnet} label="Chaves da Spot Testnet (testnet.binance.vision)" />
+          <Switch checked={demo} onChange={setDemo} label="Chaves do Demo Trading (conta de demonstração da OKX)" />
           <StepUpFields password={password} code={code} onPassword={setPassword} onCode={setCode} twoFactor={twoFactor} />
           <ErrorBox error={save.error} />
           <div className="flex gap-2">
@@ -175,8 +214,10 @@ function BinanceCard({ creds, twoFactor }: { creds: Credentials["binance"]; twoF
       <div className="mt-5 flex gap-2 rounded-lg bg-surface-2 p-3 text-xs text-ink-2">
         <ShieldCheck className="size-4 shrink-0 text-accent" />
         <div>
-          Na Binance, crie a chave com <strong className="text-ink">leitura e Spot Trading</strong>, <strong className="text-ink">sem saque</strong>, e restrinja ao IP do servidor.
-          O sistema confere as permissões na Binance e <strong className="text-ink">recusa chaves com saque liberado</strong>. As chaves ficam criptografadas no banco.
+          Na OKX: <strong className="text-ink">Perfil → API → Criar chave de API V5</strong>. Marque só <strong className="text-ink">Leitura e Negociação</strong>,{" "}
+          <strong className="text-ink">nunca Saque</strong>, crie a passphrase e vincule o IP do servidor. O sistema confere as permissões na OKX e{" "}
+          <strong className="text-ink">recusa chaves com saque</strong>. Use a conta no modo Spot.
+          <ServerIp />
         </div>
       </div>
     </Card>
@@ -538,7 +579,7 @@ function SecurityCard({ status }: { status: SecurityStatus }) {
           ) : (
             <>
               <p className="text-ink-2">
-                Recomendado: com o 2FA, quem descobrir sua senha ainda precisa do seu celular para entrar, trocar as chaves da Binance ou liberar o piloto automático em bots reais.
+                Recomendado: com o 2FA, quem descobrir sua senha ainda precisa do seu celular para entrar, trocar as chaves da OKX ou liberar o piloto automático em bots reais.
               </p>
               <Button size="sm" variant="primary" onClick={() => setModal("setup")}><ShieldCheck className="size-3.5" />Ativar</Button>
             </>
@@ -552,7 +593,7 @@ function SecurityCard({ status }: { status: SecurityStatus }) {
           <ErrorBox error={logoutOthers.error} />
         </section>
         <ul className="space-y-1 border-t border-line pt-4 text-xs text-ink-2">
-          <li className="flex gap-1.5"><CheckCircle2 className="size-3.5 shrink-0 text-good-text" />Chaves criptografadas; o segredo da Binance nunca volta para a tela nem vai para a IA.</li>
+          <li className="flex gap-1.5"><CheckCircle2 className="size-3.5 shrink-0 text-good-text" />Chaves criptografadas; o segredo e a passphrase da OKX nunca voltam para a tela nem vão para a IA.</li>
           <li className="flex gap-1.5"><CheckCircle2 className="size-3.5 shrink-0 text-good-text" />Bloqueio automático após várias senhas erradas (por IP e por conta).</li>
           <li className="flex gap-1.5"><CheckCircle2 className="size-3.5 shrink-0 text-good-text" />Cookie de sessão protegido (HttpOnly, SameSite=Strict) e proteção contra requisições de outros sites.</li>
         </ul>
@@ -600,7 +641,7 @@ function device(ua: string): string {
   return [browser, os].filter(Boolean).join(" · ") || ua.slice(0, 40);
 }
 
-const RISKY = new Set(["login_fail", "login_blocked", "login_2fa_fail", "step_up_fail", "binance_keys_rejected", "2fa_disabled"]);
+const RISKY = new Set(["login_fail", "login_blocked", "login_2fa_fail", "step_up_fail", "okx_keys_rejected", "binance_keys_rejected", "2fa_disabled"]);
 
 function ActivityCard() {
   const { data } = useQuery({ queryKey: ["security-events"], queryFn: () => api.get<SecurityEvent[]>("/security/events?limit=30") });
@@ -715,7 +756,7 @@ export function SettingsPage() {
       {data && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="space-y-4">
-            <BinanceCard creds={data.binance} twoFactor={twoFactor} />
+            <OkxCard creds={data.okx} twoFactor={twoFactor} />
             {security.data && <SecurityCard status={security.data} />}
             <PasswordCard />
           </div>

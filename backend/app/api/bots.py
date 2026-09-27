@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.core.engine import BotService, add_event, binance_credential, make_live_trader, manager
-from app.core.exchange import PaperTrader, get_market, interval_ms, now_ms
+from app.core.engine import BotService, add_event, make_live_trader, manager, market_params, okx_credential
+from app.core.exchange import PaperTrader, interval_ms, now_ms
+from app.core.markets import get_market
 from app.core.risk import RiskConfig
 from app.core.strategies import get_strategy
 from app.db import get_db
@@ -16,8 +17,16 @@ router = APIRouter(prefix="/bots", tags=["bots"])
 
 
 def _require_live_ready(db: Session, bot: Bot) -> None:
-    if bot.mode == "live" and binance_credential(db, bot.user_id) is None:
-        raise HTTPException(400, "Cadastre as chaves da Binance em Configurações antes de operar em modo real.")
+    if bot.mode == "live" and okx_credential(db, bot.user_id) is None:
+        raise HTTPException(400, "Cadastre as chaves da OKX em Configurações antes de operar em modo real.")
+
+
+def _rules(db: Session, user_id: int, mode: str, symbol: str):
+    demo, region = market_params(db, user_id, mode)
+    try:
+        return get_market(demo, region).symbol_rules(symbol)
+    except Exception as exc:
+        raise HTTPException(400, f"Par inválido na OKX ou OKX indisponível: {exc}") from exc
 
 
 @router.get("")
@@ -28,15 +37,13 @@ def list_bots(user: User = Depends(get_current_user), db: Session = Depends(get_
 
 @router.post("")
 def create_bot(body: BotIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    try:
-        rules = get_market().symbol_rules(body.symbol)
-    except Exception as exc:
-        raise HTTPException(400, f"Par inválido ou Binance indisponível: {exc}") from exc
+    rules = _rules(db, user.id, body.mode, body.symbol)
     strategy = get_strategy(body.strategy)
     bot = Bot(
         user_id=user.id,
         name=body.name.strip(),
         symbol=body.symbol,
+        exchange="okx",
         base_asset=rules.base,
         quote_asset=rules.quote,
         interval=body.interval,

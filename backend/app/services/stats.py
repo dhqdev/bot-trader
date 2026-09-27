@@ -9,8 +9,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.engine import binance_credential, manager
-from app.core.exchange import get_market
+from app.core.engine import manager, market_params
+from app.core.markets import get_market
 from app.core.risk import RiskConfig
 from app.core.strategies import STRATEGIES
 from app.models import Bot, BotEvent, Position, utcnow
@@ -23,19 +23,20 @@ class PriceCache:
 
     def __init__(self, ttl: float = 10.0):
         self.ttl = ttl
-        self._data: dict[bool, tuple[float, dict[str, float]]] = {}
+        self._data: dict[tuple, tuple[float, dict[str, float]]] = {}
         self._lock = threading.Lock()
 
-    def get(self, symbol: str, testnet: bool = False) -> float | None:
+    def get(self, symbol: str, demo: bool = False, region: str = "global") -> float | None:
+        key = (demo, region)
         with self._lock:
-            cached = self._data.get(testnet)
+            cached = self._data.get(key)
             if cached is None or time.time() - cached[0] > self.ttl:
                 try:
-                    cached = (time.time(), get_market(testnet).prices())
+                    cached = (time.time(), get_market(demo, region).prices())
                 except Exception as exc:
-                    log.warning("Falha ao buscar preços: %s", exc)
+                    log.warning("Falha ao buscar preços na OKX: %s", exc)
                     cached = (time.time() - self.ttl + 3, cached[1] if cached else {})
-                self._data[testnet] = cached
+                self._data[key] = cached
         return cached[1].get(symbol)
 
 
@@ -43,11 +44,8 @@ prices = PriceCache()
 
 
 def price_for(db: Session, bot: Bot) -> float | None:
-    testnet = False
-    if bot.mode == "live":
-        cred = binance_credential(db, bot.user_id)
-        testnet = bool(cred and cred.testnet)
-    return prices.get(bot.symbol, testnet)
+    demo, region = market_params(db, bot.user_id, bot.mode)
+    return prices.get(bot.symbol, demo, region)
 
 
 def _iso(dt: datetime | None) -> str | None:

@@ -138,11 +138,11 @@ export function BotDetailPage() {
   const confirmations: Record<Exclude<Action, null>, { title: string; message: string; label: string; danger?: boolean }> = {
     start: {
       title: b.mode === "live" ? "Ligar bot em modo REAL?" : "Ligar bot?",
-      message: b.mode === "live" ? "O bot vai enviar ordens reais à Binance com o seu dinheiro, conforme a estratégia e o risco configurados." : "O bot vai operar com saldo simulado e preços reais.",
+      message: b.mode === "live" ? "O bot vai enviar ordens reais à OKX com o seu dinheiro, conforme a estratégia e o risco configurados." : "O bot vai operar com saldo simulado e preços reais.",
       label: "Ligar",
     },
     stop: { title: "Parar bot?", message: b.position ? "A posição aberta continua aberta e deixa de ser monitorada (sem stop automático) até você ligar o bot de novo." : "O bot deixa de avaliar o mercado.", label: "Parar", danger: true },
-    close: { title: "Encerrar posição agora?", message: `Vende toda a posição a mercado${b.mode === "live" ? " na Binance" : ""}.`, label: "Vender agora", danger: true },
+    close: { title: "Encerrar posição agora?", message: `Vende toda a posição a mercado${b.mode === "live" ? " na OKX" : ""}.`, label: "Vender agora", danger: true },
     delete: { title: "Excluir bot?", message: "O histórico de operações deste bot também será apagado.", label: "Excluir", danger: true },
     reset: { title: "Resetar simulação?", message: "Apaga operações, ordens e eventos deste bot e volta o saldo simulado ao valor inicial.", label: "Resetar", danger: true },
   };

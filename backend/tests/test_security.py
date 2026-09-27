@@ -29,8 +29,8 @@ def client(fresh_db):
 def permissions(monkeypatch):
     perms = dict(SAFE)
     monkeypatch.setattr(
-        "app.core.exchange.inspect_api_key",
-        lambda key, secret, testnet=False: {"can_trade": True, "account_type": "SPOT", "permissions": perms},
+        "app.core.okx.inspect_okx_key",
+        lambda key, secret, passphrase, demo=False, region="global": {"can_trade": True, "account_type": "Spot (simples)", "permissions": perms},
     )
     return perms
 
@@ -92,21 +92,21 @@ def test_account_lockout_after_failures():
     assert r.status_code == 401 and r.json()["detail"] == "E-mail ou senha incorretos."
 
 
-def test_binance_keys_need_password_and_no_withdrawals(client, permissions):
-    keys = {"api_key": "K" * 30, "api_secret": "S" * 30}
-    assert client.put("/api/settings/binance", json=keys).status_code == 403
-    assert client.put("/api/settings/binance", json={**keys, "password": "errada"}).status_code == 403
+def test_okx_keys_need_password_and_no_withdrawals(client, permissions):
+    keys = {"api_key": "K" * 30, "api_secret": "S" * 30, "passphrase": "Frase#1"}
+    assert client.put("/api/settings/okx", json=keys).status_code == 403
+    assert client.put("/api/settings/okx", json={**keys, "password": "errada"}).status_code == 403
 
     permissions["withdrawals"] = True
-    r = client.put("/api/settings/binance", json={**keys, "password": PASSWORD})
+    r = client.put("/api/settings/okx", json={**keys, "password": PASSWORD})
     assert r.status_code == 400 and "SAQUE" in r.json()["detail"]
-    assert client.get("/api/settings/credentials").json()["binance"]["configured"] is False
+    assert client.get("/api/settings/credentials").json()["okx"]["configured"] is False
 
     permissions["withdrawals"] = False
-    r = client.put("/api/settings/binance", json={**keys, "password": PASSWORD})
+    r = client.put("/api/settings/okx", json={**keys, "password": PASSWORD})
     assert r.status_code == 200, r.text
     assert any("IP" in w for w in r.json()["warnings"])  # chave sem restrição de IP gera aviso
-    creds = client.get("/api/settings/credentials").json()["binance"]
+    creds = client.get("/api/settings/credentials").json()["okx"]
     assert creds["configured"] and creds["permissions"]["withdrawals"] is False and creds["warnings"]
 
 
@@ -180,7 +180,7 @@ def test_two_factor_flow(client):
 def test_security_events_are_recorded(client):
     kinds = {e["kind"] for e in client.get("/api/security/events?limit=200").json()}
     assert {"register", "login_ok", "login_fail", "logout_all", "password_changed", "2fa_enabled", "2fa_disabled",
-            "recovery_used", "binance_keys_saved", "binance_keys_rejected"} <= kinds  # fmt: skip
+            "recovery_used", "okx_keys_saved", "okx_keys_rejected"} <= kinds  # fmt: skip
     event = client.get("/api/security/events").json()[0]
     assert event["label"] and "created_at" in event
 

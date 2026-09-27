@@ -39,14 +39,14 @@ class User(Base):
 
 
 class Credential(Base):
-    """Chaves de API criptografadas (Binance, Anthropic)."""
+    """Chaves de API criptografadas (OKX, Anthropic, OpenAI)."""
 
     __tablename__ = "credentials"
     __table_args__ = (UniqueConstraint("user_id", "provider"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    provider: Mapped[str] = mapped_column(String(32))  # binance | anthropic
+    provider: Mapped[str] = mapped_column(String(32))  # okx | anthropic | openai
     key_enc: Mapped[str] = mapped_column(Text)
     secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     testnet: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -71,6 +71,8 @@ class Bot(Base):
     base_asset: Mapped[str] = mapped_column(String(16))
     quote_asset: Mapped[str] = mapped_column(String(16))
     interval: Mapped[str] = mapped_column(String(8))
+    # corretora do bot. Hoje sempre "okx"; bots antigos da Binance são migrados na inicialização
+    exchange: Mapped[str] = mapped_column(String(16), default="okx", server_default="okx")
     strategy: Mapped[str] = mapped_column(String(64))
     strategy_params: Mapped[dict] = mapped_column(JSON, default=dict)
     risk: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -291,6 +293,21 @@ class AIInsight(Base):
     source: Mapped[str] = mapped_column(String(16), default="ai")  # ai | optimizer
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow)
+
+
+class CandleCache(Base):
+    """Candles fechados já baixados da OKX (não mudam): backtests e o piloto só buscam o que falta."""
+
+    __tablename__ = "candle_cache"
+
+    symbol: Mapped[str] = mapped_column(String(32), primary_key=True)
+    interval: Mapped[str] = mapped_column(String(8), primary_key=True)
+    time: Mapped[int] = mapped_column(BigInteger, primary_key=True)  # ms, abertura do candle
+    open: Mapped[float] = mapped_column(Float)
+    high: Mapped[float] = mapped_column(Float)
+    low: Mapped[float] = mapped_column(Float)
+    close: Mapped[float] = mapped_column(Float)
+    volume: Mapped[float] = mapped_column(Float)
 
 
 class KVSetting(Base):

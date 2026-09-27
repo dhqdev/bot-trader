@@ -37,7 +37,7 @@ async function login(page) {
 }
 
 async function ensureBot(page) {
-  // cria um bot simulado pela API (precisa da Binance; sem acesso, os passos do bot são pulados)
+  // cria um bot simulado pela API (precisa da OKX; sem acesso, os passos do bot são pulados)
   return page.evaluate(async () => {
     const list = await (await fetch("/api/bots", { credentials: "include" })).json();
     if (Array.isArray(list) && list.length) return list[0].name;
@@ -83,7 +83,7 @@ async function tour(browser, { label, viewport, navSelector, names }) {
     await assertHealthy(page, errors, `${label} detalhe do bot`);
     await go("bots", "Bots");
   } else {
-    console.log(`  (${label}) sem acesso à Binance: passos do detalhe do bot pulados`);
+    console.log(`  (${label}) sem acesso à OKX: passos do detalhe do bot pulados`);
   }
 
   await page.getByRole("button", { name: "Novo bot" }).click();

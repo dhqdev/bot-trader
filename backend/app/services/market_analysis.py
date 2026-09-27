@@ -3,7 +3,7 @@
 import math
 
 from app.core import indicators as ta
-from app.core.exchange import get_market
+from app.core.markets import get_market
 
 
 def _r(v, nd=4):

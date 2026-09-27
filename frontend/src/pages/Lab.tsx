@@ -104,7 +104,7 @@ function Guide() {
       {open && (
         <div className="mt-3 space-y-3 text-sm text-ink-2">
           <p>
-            O laboratório simula a estratégia no histórico real da Binance, como se o bot tivesse operado naquele período: compra e vende nos mesmos
+            O laboratório simula a estratégia no histórico real da OKX, como se o bot tivesse operado naquele período: compra e vende nos mesmos
             pontos em que o bot compraria, paga taxa e slippage, e respeita stop e alvos. Nenhum dinheiro é usado.
           </p>
           <ol className="list-decimal space-y-1.5 pl-5">
@@ -260,7 +260,7 @@ export function LabPage() {
 
   return (
     <>
-      <PageHeader title="Laboratório" subtitle="Teste estratégias no histórico real da Binance antes de arriscar dinheiro, com taxa, slippage, stop e alvos." />
+      <PageHeader title="Laboratório" subtitle="Teste estratégias no histórico real da OKX antes de arriscar dinheiro, com taxa, slippage, stop e alvos." />
       <div className="mb-4">
         <Guide />
       </div>

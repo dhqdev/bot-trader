@@ -194,7 +194,7 @@ export function RiskForm({ risk, onChange, quote = "USDT", lab = false }: { risk
             </Select>
           </Field>
           {risk.sizing_mode === "fixed_quote" && (
-            <NumberField label="Valor por compra" suffix={quote} value={risk.order_size_quote} onChange={(v) => set("order_size_quote", v)} step={1} help="Quanto cada compra gasta. A Binance recusa ordens abaixo de ~5 USDT." />
+            <NumberField label="Valor por compra" suffix={quote} value={risk.order_size_quote} onChange={(v) => set("order_size_quote", v)} step={1} help="Quanto cada compra gasta. A OKX tem um mínimo por par (cerca de 1 USDT nos pares principais)." />
           )}
           {risk.sizing_mode === "percent_balance" && (
             <NumberField label="% do saldo" value={risk.balance_percent} onChange={(v) => set("balance_percent", v)} step={1} help="Ex.: 25 = cada compra usa um quarto do saldo livre." />
@@ -272,7 +272,7 @@ export function RiskForm({ risk, onChange, quote = "USDT", lab = false }: { risk
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <NumberField label="Pausa após vender" suffix="candles" value={risk.cooldown_bars} step={1} onChange={(v) => set("cooldown_bars", Math.round(v))} help="Espera N candles antes de comprar de novo, para não reentrar no mesmo movimento que acabou de sair." />
           <NumberField label="Perda diária máxima" suffix={quote} value={risk.max_daily_loss_quote} step={1} onChange={(v) => set("max_daily_loss_quote", v)} help="Se as operações fechadas no dia somarem essa perda, não compra mais até o dia seguinte (horário UTC). 0 = desligado." />
-          <NumberField label="Taxa da corretora" suffix="% por ordem" value={risk.fee_pct} step={0.01} onChange={(v) => set("fee_pct", v)} help="Descontada de cada compra e venda no resultado. Binance: 0,1% (0,075% pagando a taxa com BNB)." />
+          <NumberField label="Taxa da corretora" suffix="% por ordem" value={risk.fee_pct} step={0.01} onChange={(v) => set("fee_pct", v)} help="Descontada de cada compra e venda no resultado. OKX: 0,1% por ordem a mercado (menos nos níveis VIP)." />
         </div>
       </Section>
 
@@ -323,7 +323,7 @@ const SENTIMENT_HELP: Record<SentimentFilter, string> = {
 
 const NEWS_HELP: Record<NewsGuard, string> = {
   block_entries:
-    "Com notícia grave e negativa sobre a moeda (ou sobre o mercado todo, como um problema na Binance), o bot não compra por algumas horas. Vale a classificação da IA ou a mesma notícia em duas fontes.",
+    "Com notícia grave e negativa sobre a moeda (ou sobre o mercado todo, como um problema na OKX), o bot não compra por algumas horas. Vale a classificação da IA ou a mesma notícia em duas fontes.",
   block_and_exit:
     "Além de não comprar, vende a posição aberta se a notícia grave sair depois da compra e for confirmada pela IA. Não dá para testar isso em backtest: use com cautela.",
   off: "Ignora as notícias.",

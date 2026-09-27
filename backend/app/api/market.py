@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.core.exchange import INTERVAL_MINUTES, get_market
+from app.core.exchange import INTERVAL_MINUTES
+from app.core.markets import get_market
 from app.deps import get_current_user
 
 router = APIRouter(prefix="/market", tags=["market"], dependencies=[Depends(get_current_user)])
@@ -16,7 +17,7 @@ def symbols(quote: str = Query("USDT", max_length=10)):
     try:
         return get_market().symbols(quote)
     except Exception as exc:
-        raise HTTPException(502, f"Binance indisponível: {exc}") from exc
+        raise HTTPException(502, f"OKX indisponível: {exc}") from exc
 
 
 @router.get("/ticker")

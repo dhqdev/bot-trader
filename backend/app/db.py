@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from typing import Iterator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
@@ -34,10 +34,29 @@ engine = _make_engine(get_settings().database_url)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
+# Colunas criadas depois da primeira versão. create_all só cria tabelas novas, então
+# bancos antigos recebem a coluna aqui (com valor padrão para as linhas existentes).
+ADDED_COLUMNS = [
+    # bots anteriores à coluna eram da Binance: ficam marcados assim e engine.migrate_to_okx os passa para a OKX
+    ("bots", "exchange", "VARCHAR(16) NOT NULL DEFAULT 'binance'"),
+]
+
+
+def _add_missing_columns(target=None) -> None:
+    target = target or engine
+    inspector = inspect(target)
+    tables = set(inspector.get_table_names())
+    with target.begin() as conn:
+        for table, column, ddl in ADDED_COLUMNS:
+            if table in tables and column not in {c["name"] for c in inspector.get_columns(table)}:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+
+
 def init_db() -> None:
     from app import models  # noqa: F401  (registra as tabelas)
 
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
 
 
 @contextmanager

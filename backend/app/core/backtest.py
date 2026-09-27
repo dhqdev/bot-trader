@@ -21,7 +21,7 @@ from app.core.risk import RiskConfig, open_position, position_size_quote, update
 from app.core.sentiment import entry_mask
 from app.core.strategies import get_strategy
 
-MIN_ORDER_QUOTE = 5.0  # a Binance recusa ordens abaixo de ~5 USDT
+MIN_ORDER_QUOTE = 1.0  # a OKX recusa ordens muito pequenas (mínimo por par, cerca de 1 USDT)
 
 
 def _day(ms: int) -> str:

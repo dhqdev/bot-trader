@@ -47,10 +47,12 @@ class TwoFactorCodeIn(BaseModel):
     code: str = Field(min_length=6, max_length=32)
 
 
-class BinanceKeysIn(StepUpIn):
+class OkxKeysIn(StepUpIn):
     api_key: str = Field(min_length=10, max_length=256)
     api_secret: str = Field(min_length=10, max_length=256)
-    testnet: bool = False
+    passphrase: str = Field(min_length=1, max_length=128)
+    demo: bool = False  # chaves criadas no "Demo Trading" da OKX
+    region: Literal["global", "eea", "us"] = "global"
 
 
 class AnthropicKeyIn(StepUpIn):
@@ -109,7 +111,7 @@ class BotIn(BaseModel):
     @field_validator("symbol")
     @classmethod
     def _symbol(cls, v: str) -> str:
-        return v.strip().upper().replace("/", "")
+        return v.strip().upper().replace("/", "").replace("-", "")
 
 
 class BotUpdate(BaseModel):

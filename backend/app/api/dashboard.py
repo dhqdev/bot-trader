@@ -1,17 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.engine import binance_credential
-from app.core.exchange import BinanceTrader, get_market
+from app.core.engine import make_live_trader, market_params, okx_credential
+from app.core.markets import get_market
 from app.db import get_db
 from app.deps import get_current_user
-from app.models import User
-from app.security import decrypt
+from app.models import Bot, User
 from app.services import stats
 
 router = APIRouter(tags=["dashboard"])
 
-STABLES = {"USDT", "USDC", "FDUSD", "BUSD", "TUSD", "DAI"}
+STABLES = {"USDT", "USDC", "FDUSD", "BUSD", "TUSD", "DAI", "USD"}
 
 
 @router.get("/dashboard")
@@ -23,19 +22,18 @@ def dashboard(
     return stats.dashboard(db, user.id, mode)
 
 
-@router.get("/account/balance")
-def account_balance(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Carteira Spot real, avaliada em USDT."""
-    cred = binance_credential(db, user.id)
-    if cred is None:
-        raise HTTPException(400, "Chaves da Binance não configuradas.")
+def _wallet(db: Session, user: User) -> dict:
+    cred = okx_credential(db, user.id)
+    view = {"exchange": "okx", "label": "OKX", "testnet": bool(cred.testnet), "total_usdt": None, "assets": [], "error": None}
     try:
-        trader = BinanceTrader(decrypt(cred.key_enc), decrypt(cred.secret_enc or ""), testnet=cred.testnet)
+        # o trader real só lê a carteira aqui; nenhuma ordem é enviada
+        trader = make_live_trader(db, Bot(user_id=user.id, mode="live"))
         summary = trader.account_summary()
-        prices = get_market(cred.testnet).prices()
+        demo, region = market_params(db, user.id, "live")
+        prices = get_market(demo, region).prices()
     except Exception as exc:
-        raise HTTPException(502, f"Falha ao consultar a Binance: {exc}") from exc
-
+        view["error"] = f"Falha ao consultar a OKX: {exc}"[:300]
+        return view
     assets, total = [], 0.0
     for b in summary["balances"]:
         amount = b["free"] + b["locked"]
@@ -48,4 +46,12 @@ def account_balance(user: User = Depends(get_current_user), db: Session = Depend
             total += value
         assets.append({**b, "total": amount, "value_usdt": value})
     assets.sort(key=lambda a: a["value_usdt"] or 0, reverse=True)
-    return {"total_usdt": total, "assets": assets, "testnet": cred.testnet, "can_trade": summary["can_trade"]}
+    view.update(total_usdt=total, assets=assets, can_trade=summary["can_trade"])
+    return view
+
+
+@router.get("/account/balance")
+def account_balance(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Carteira Spot real na OKX, avaliada em USDT."""
+    wallets = [_wallet(db, user)] if okx_credential(db, user.id) is not None else []
+    return {"wallets": wallets}

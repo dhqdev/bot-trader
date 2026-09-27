@@ -3,7 +3,6 @@ uvicorn[standard]==0.54.0
 SQLAlchemy==2.1.1
 pydantic==2.13.5
 pydantic-settings==2.15.0
-python-binance==1.0.37
 pandas==3.0.6
 numpy==2.5.3
 bcrypt==5.0.0

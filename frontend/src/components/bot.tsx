@@ -202,7 +202,7 @@ export function OrdersTable({ orders, quote }: { orders: OrderRow[]; quote: stri
             <th className="py-2 pr-3 text-right font-medium">Total ({quote})</th>
             <th className="py-2 pr-3 text-right font-medium">Taxa</th>
             <th className="py-2 pr-3 font-medium">Motivo</th>
-            <th className="py-2 font-medium">ID Binance</th>
+            <th className="py-2 font-medium">ID na OKX</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-line">

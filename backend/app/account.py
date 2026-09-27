@@ -33,6 +33,9 @@ EVENT_LABELS = {
     "binance_keys_saved": "Chaves da Binance cadastradas",
     "binance_keys_rejected": "Chaves da Binance recusadas",
     "binance_keys_removed": "Chaves da Binance removidas",
+    "okx_keys_saved": "Chaves da OKX cadastradas",
+    "okx_keys_rejected": "Chaves da OKX recusadas",
+    "okx_keys_removed": "Chaves da OKX removidas",
     "anthropic_key_saved": "Chave da Anthropic cadastrada",
     "anthropic_key_removed": "Chave da Anthropic removida",
     "openai_key_saved": "Chave da OpenAI cadastrada",
@@ -119,7 +122,7 @@ def require_step_up(db: Session, user: User, password: str | None, code: str | N
     """Ações sensíveis pedem a senha de novo (e o código de 2 etapas, se ativado).
 
     Assim, alguém que pegue uma sessão aberta não consegue trocar as chaves da
-    Binance, desligar o 2FA nem liberar o piloto automático em contas reais.
+    OKX, desligar o 2FA nem liberar o piloto automático em contas reais.
     """
     key = f"step:{user.id}"
     if not account_limiter.check(key):

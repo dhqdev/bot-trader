@@ -186,17 +186,17 @@ ASSET_NAMES = {
 ASSET_TICKERS = set(ASSET_NAMES) | {"SUI", "OP", "ATOM", "SEI", "WIF", "FET", "RENDER", "MATIC", "TIA", "ENA", "ONDO"}
 
 # notícias que mexem com o mercado todo (termos amplos de propósito ficam de fora,
-# como "SEC" ou "Binance": a maioria dessas notícias fala de um projeto só)
+# como "SEC" ou o nome de uma corretora: a maioria dessas notícias fala de um projeto só)
 MARKET_TERMS = [
     "crypto market", "cryptocurrency market", "crypto markets", "mercado cripto", "mercado de criptomoedas",
     "federal reserve", "interest rate", "rate cut", "rate hike", "taxa de juros", "juros nos eua", "inflation",
     "inflação", "cpi", "stablecoin", "tether", "liquidations", "liquidações", "recession", "recessão",
     "tariff", "tarifas",
 ]  # fmt: skip
-# problema grave na própria Binance afeta todos os bots
-_BINANCE_CRISIS = re.compile(
-    r"binance.{0,60}(hack|exploit|halt|suspend|paus|insolv|bankrupt|freez|congela|suspende)"
-    r"|(hack|exploit|halt|suspend|paus|insolv|bankrupt|freez|congela|suspende).{0,60}binance",
+# problema grave na corretora dos bots (OKX) ou na maior do mercado (Binance) afeta todos os bots
+_EXCHANGE_CRISIS = re.compile(
+    r"(okx|binance).{0,60}(hack|exploit|halt|suspend|paus|insolv|bankrupt|freez|congela|suspende)"
+    r"|(hack|exploit|halt|suspend|paus|insolv|bankrupt|freez|congela|suspende).{0,60}(okx|binance)",
     re.IGNORECASE,
 )
 
@@ -215,7 +215,7 @@ def detect_assets(text: str, extra: set[str] | frozenset[str] = frozenset()) -> 
     tickers = ASSET_TICKERS | {t for t in extra if len(t) >= 3}
     found |= {m.group(1) for m in _TICKER_RE.finditer(text) if m.group(1) in tickers}
     out = sorted(found)
-    if _MARKET_RE.search(text) or _BINANCE_CRISIS.search(text):
+    if _MARKET_RE.search(text) or _EXCHANGE_CRISIS.search(text):
         out.append("MARKET")
     return out
 
@@ -323,10 +323,10 @@ def collect(feeds: list[Feed] | None = None, fetcher=fetch_feed) -> dict:
 # ---------------------------------------------------------------------------
 # Classificação com IA
 
-CLASSIFY_SYSTEM = """Você classifica notícias do mercado de criptomoedas para um sistema de trading automatizado na Binance Spot (só compra; lucra quando o preço sobe).
+CLASSIFY_SYSTEM = """Você classifica notícias do mercado de criptomoedas para um sistema de trading automatizado na OKX Spot (só compra; lucra quando o preço sobe).
 
 Para cada notícia, avalie o efeito provável no PREÇO nas próximas horas/dias:
-- assets: tickers das moedas afetadas diretamente (ex.: "BTC", "ETH", "SOL"). Inclua "MARKET" só quando o fato tende a mexer com o mercado cripto inteiro (ex.: hack ou falência de grande corretora, problema na Binance, regulação ampla, choque macro, queda forte do BTC). Lista vazia se não houver moeda relevante.
+- assets: tickers das moedas afetadas diretamente (ex.: "BTC", "ETH", "SOL"). Inclua "MARKET" só quando o fato tende a mexer com o mercado cripto inteiro (ex.: hack ou falência de grande corretora, problema na OKX, regulação ampla, choque macro, queda forte do BTC). Lista vazia se não houver moeda relevante.
 - sentiment: de -1 (muito negativo para o preço) a 1 (muito positivo). 0 = neutro ou irrelevante. Opiniões, previsões e análises técnicas valem perto de 0.
 - impact: "high" só para fatos concretos e graves ou muito relevantes (hack/roubo, falência, suspensão de saques, processo ou proibição por regulador, deslistagem, aprovação de ETF); "medium" para fatos com efeito provável; "low" para o resto.
 - category: security, regulation, macro, listing, etf, adoption, market, other.

@@ -41,10 +41,10 @@ export function BotFormPage() {
   const draft = (location.state as { draft?: BotDraft } | null)?.draft;
   const qc = useQueryClient();
   const strategies = useStrategies();
-  const symbols = useSymbols();
   const creds = useQuery({ queryKey: ["credentials"], queryFn: () => api.get<Credentials>("/settings/credentials") });
   const existing = useQuery({ queryKey: ["bot", id], queryFn: () => api.get<Bot>(`/bots/${id}`), enabled: editing });
 
+  const symbols = useSymbols();
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("BTCUSDT");
   const [interval, setTimeframe] = useState("4h");
@@ -107,7 +107,7 @@ export function BotFormPage() {
   if (!ready || !risk) return <Loading />;
   const strategyInfo = strategies.data!.strategies.find((s) => s.key === strategy);
   const quote = symbol.endsWith("USDT") ? "USDT" : "";
-  const liveWithoutKeys = mode === "live" && creds.data && !creds.data.binance.configured;
+  const liveWithoutKeys = mode === "live" && creds.data && !creds.data.okx.configured;
   const fastLive = mode === "live" && TIER_OF_INTERVAL[interval] === "rapido";
   const blocked = Boolean(liveWithoutKeys) || (fastLive && !ackFast);
 
@@ -198,11 +198,11 @@ export function BotFormPage() {
                 { value: "live", label: "Real (dinheiro de verdade)" },
               ]}
             />
-            {mode === "paper" && <span className="text-xs text-ink-2">Ordens fictícias com preços reais da Binance, taxa e slippage. Ideal para testar sem risco.</span>}
+            {mode === "paper" && <span className="text-xs text-ink-2">Ordens fictícias com preços reais da OKX, taxa e slippage. Ideal para testar sem risco.</span>}
             {mode === "live" && (
               <span className="flex items-center gap-1.5 text-xs text-warn-text">
                 <AlertTriangle className="size-3.5" />
-                {liveWithoutKeys ? "Cadastre as chaves da Binance em Configurações." : "Ordens reais serão enviadas à Binance."}
+                {liveWithoutKeys ? "Cadastre as chaves da OKX em Configurações." : "Ordens reais serão enviadas à OKX."}
               </span>
             )}
           </div>

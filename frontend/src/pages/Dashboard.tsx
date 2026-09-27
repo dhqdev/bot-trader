@@ -8,7 +8,7 @@ import { TierBadge } from "../components/profiles";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Pnl, Segmented, Stat } from "../components/ui";
 import { api } from "../lib/api";
 import { duration, fearGreedTone, money, num, pct, signedMoney } from "../lib/format";
-import type { BotAlert, Credentials, Dashboard, SentimentResponse } from "../lib/types";
+import type { BotAlert, Credentials, Dashboard, SentimentResponse, Wallet } from "../lib/types";
 
 const TONE_TEXT = { bad: "text-bad-text", warn: "text-warn-text", neutral: "text-ink", good: "text-good-text" } as const;
 
@@ -74,22 +74,30 @@ function useDefaultMode(): [ModeFilter, (m: ModeFilter) => void] {
   return [mode ?? "paper", set];
 }
 
+/** Carteira real em cada corretora com chave cadastrada. */
 function Balance() {
   const creds = useQuery({ queryKey: ["credentials"], queryFn: () => api.get<Credentials>("/settings/credentials") });
+  const configured = Boolean(creds.data?.okx.configured);
   const balance = useQuery({
     queryKey: ["balance"],
-    queryFn: () => api.get<{ total_usdt: number; testnet: boolean; assets: { asset: string; total: number; value_usdt: number | null }[] }>("/account/balance"),
-    enabled: Boolean(creds.data?.binance.configured),
+    queryFn: () => api.get<{ wallets: Wallet[] }>("/account/balance"),
+    enabled: configured,
     refetchInterval: 60_000,
     retry: false,
   });
-  if (!creds.data?.binance.configured) return null;
+  if (!configured) return null;
+  if (!balance.data) return <Stat label="Carteira" value={balance.isError ? "indisponível" : "…"} />;
   return (
-    <Stat
-      label={balance.data?.testnet ? "Carteira Binance (testnet)" : "Carteira Binance"}
-      value={balance.data ? money(balance.data.total_usdt) : balance.isError ? "indisponível" : "…"}
-      sub={balance.data ? balance.data.assets.slice(0, 3).map((a) => `${a.asset} ${num(a.total, 4)}`).join(" · ") : undefined}
-    />
+    <>
+      {balance.data.wallets.map((w) => (
+        <Stat
+          key={w.exchange}
+          label={`Carteira ${w.label}${w.testnet ? " (demo)" : ""}`}
+          value={w.total_usdt != null ? money(w.total_usdt) : "indisponível"}
+          sub={w.error ?? w.assets.slice(0, 3).map((a) => `${a.asset} ${num(a.total, 4)}`).join(" · ")}
+        />
+      ))}
+    </>
   );
 }
 
@@ -130,7 +138,7 @@ export function DashboardPage() {
         {header}
         <Card>
           <Empty icon={<BotIcon className="size-8" />} title={mode === "live" ? "Nenhum bot em modo real" : "Nenhum bot ainda"}>
-            Crie um bot em modo simulado para testar sem risco. Ele usa preços reais da Binance, com taxa e slippage.
+            Crie um bot em modo simulado para testar sem risco. Ele usa preços reais da OKX, com taxa e slippage.
             <div className="mt-4 flex justify-center gap-2">
               <Button variant="primary" onClick={() => navigate("/bots/new")}><Plus className="size-4" />Criar bot</Button>
               <Button onClick={() => navigate("/lab")}>Testar estratégias</Button>

@@ -18,22 +18,22 @@ def client(fresh_db):
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
     market = FakeMarket()
-    monkeypatch.setattr(bots_api, "get_market", lambda testnet=False: market)
+    monkeypatch.setattr(bots_api, "get_market", lambda demo=False, region="global": market)
     monkeypatch.setattr(manager, "market_factory", lambda db, bot: market)
     monkeypatch.setattr(manager, "spawn", lambda bot_id: None)  # sem threads nos testes
     monkeypatch.setattr(backtesting, "history", lambda symbol, interval, bars: make_ohlcv(min(bars, 3000)))
-    monkeypatch.setattr("app.services.stats.prices.get", lambda symbol, testnet=False: market.current)
-    monkeypatch.setattr("app.core.exchange.inspect_api_key", fake_inspect)
+    monkeypatch.setattr("app.services.stats.prices.get", lambda symbol, *args, **kwargs: market.current)
+    monkeypatch.setattr("app.core.okx.inspect_okx_key", fake_inspect)
 
 
 SAFE_PERMISSIONS = {
     "reading": True, "spot_trading": True, "withdrawals": False, "internal_transfer": False,
-    "universal_transfer": False, "margin": False, "futures": False, "ip_restricted": True,
+    "universal_transfer": False, "margin": False, "futures": False, "ip_restricted": True, "account_mode": "Spot (simples)",
 }  # fmt: skip
 
 
-def fake_inspect(api_key, api_secret, testnet=False):
-    return {"can_trade": True, "account_type": "SPOT", "permissions": dict(SAFE_PERMISSIONS)}
+def fake_inspect(api_key, api_secret, passphrase, demo=False, region="global"):
+    return {"can_trade": True, "account_type": "Spot (simples)", "permissions": dict(SAFE_PERMISSIONS)}
 
 
 def test_auth_flow(client):
@@ -59,12 +59,14 @@ def test_auth_flow(client):
 def test_credentials_are_masked(client):
     key, secret = "ABCDEFGHIJKLMNOPQRSTUV123456", "SECRETSECRETSECRETSECRET999"
     # trocar chaves exige a senha
-    assert client.put("/api/settings/binance", json={"api_key": key, "api_secret": secret}).status_code == 403
-    r = client.put("/api/settings/binance", json={"api_key": key, "api_secret": secret, "password": "senha-forte-1"})
+    body = {"api_key": key, "api_secret": secret, "passphrase": "Frase#Secreta1"}
+    assert client.put("/api/settings/okx", json=body).status_code == 403
+    r = client.put("/api/settings/okx", json={**body, "password": "senha-forte-1"})
     assert r.status_code == 200, r.text
     body = client.get("/api/settings/credentials").json()
-    assert body["binance"]["configured"] is True
-    assert body["binance"]["api_key"] == "ABCD••••3456"
+    assert body["okx"]["configured"] is True
+    assert body["okx"]["api_key"] == "ABCD••••3456"
+    assert "binance" not in body and "Frase#Secreta1" not in str(body)
     assert secret not in str(body) and key not in str(body)
 
 

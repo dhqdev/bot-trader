@@ -9,6 +9,7 @@ Toda a lógica de negociação de um bot fica em `BotService`, também usada
 pela API (ex.: encerrar posição manualmente).
 """
 
+import json
 import logging
 import threading
 import time
@@ -20,7 +21,9 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.core import indicators as ta
 from app.core import newsguard
-from app.core.exchange import BinanceTrader, MarketData, PaperTrader, SymbolRules, get_market, interval_ms, now_ms
+from app.core.exchange import PaperTrader, SymbolRules, interval_ms, now_ms
+from app.core.markets import EXCHANGE, EXCHANGE_LABEL, get_market
+from app.core.okx import OkxMarketData, OkxTrader
 from app.core.risk import PositionState, RiskConfig, open_position, position_size_quote, update
 from app.core.sentiment import live_check as sentiment_check
 from app.core.strategies import REMOVED, get_strategy
@@ -38,22 +41,73 @@ def add_event(db: Session, bot_id: int, level: str, message: str, data: dict | N
     db.add(BotEvent(bot_id=bot_id, level=level, message=message, data=data))
 
 
-def binance_credential(db: Session, user_id: int) -> Credential | None:
-    return db.scalar(select(Credential).where(Credential.user_id == user_id, Credential.provider == "binance"))
+def okx_credential(db: Session, user_id: int) -> Credential | None:
+    return db.scalar(select(Credential).where(Credential.user_id == user_id, Credential.provider == EXCHANGE))
 
 
-def make_live_trader(db: Session, bot: Bot) -> BinanceTrader:
-    cred = binance_credential(db, bot.user_id)
+def okx_secrets(cred: Credential) -> dict:
+    """Segredo, passphrase e região da OKX (guardados juntos e criptografados)."""
+    data = json.loads(decrypt(cred.secret_enc or ""))
+    return {"secret": data["secret"], "passphrase": data["passphrase"], "region": data.get("region", "global")}
+
+
+def make_live_trader(db: Session, bot: Bot) -> OkxTrader:
+    cred = okx_credential(db, bot.user_id)
     if cred is None or not cred.secret_enc:
-        raise RuntimeError("Chaves da Binance não configuradas.")
-    return BinanceTrader(decrypt(cred.key_enc), decrypt(cred.secret_enc), testnet=cred.testnet)
+        raise RuntimeError(f"Chaves da {EXCHANGE_LABEL} não configuradas.")
+    s = okx_secrets(cred)
+    return OkxTrader(decrypt(cred.key_enc), s["secret"], s["passphrase"], demo=cred.testnet, region=s["region"])
 
 
-def bot_market(db: Session, bot: Bot) -> MarketData:
-    if bot.mode == "live":
-        cred = binance_credential(db, bot.user_id)
-        return get_market(bool(cred and cred.testnet))
-    return get_market(False)
+def market_params(db: Session, user_id: int, mode: str) -> tuple[bool, str]:
+    """(conta de demonstração?, região da conta) para os dados de mercado de um bot."""
+    cred = okx_credential(db, user_id)
+    demo = bool(cred and cred.testnet) and mode == "live"
+    region = "global"
+    if cred is not None:
+        try:
+            region = okx_secrets(cred)["region"]
+        except (ValueError, KeyError):
+            region = "global"
+    return demo, region
+
+
+def bot_market(db: Session, bot: Bot) -> OkxMarketData:
+    demo, region = market_params(db, bot.user_id, bot.mode)
+    return get_market(demo, region)
+
+
+def migrate_to_okx(db: Session) -> int:
+    """A Binance foi removida do sistema (set/2026): os bots passam para a OKX.
+
+    - bots simulados seguem normalmente, com os preços da OKX;
+    - bots reais ligados são desligados, para o usuário conferir e religar na OKX;
+    - posição real aberta na Binance deixa de ser acompanhada (o aviso manda vender lá);
+    - as chaves da Binance guardadas são apagadas.
+    Devolve quantos bots foram migrados.
+    """
+    from app.account import audit  # evita import circular
+
+    moved = 0
+    for bot in db.scalars(select(Bot).where(Bot.exchange != EXCHANGE)):
+        moved += 1
+        pos = db.scalar(select(Position).where(Position.bot_id == bot.id, Position.status == "open"))
+        if bot.mode == "live" and pos is not None:
+            pos.status, pos.exit_reason, pos.exit_time = "closed", "migrated", utcnow()
+            pos.qty = 0.0
+            add_event(db, bot.id, "warn",
+                      f"A Binance foi removida do sistema. A posição real aberta na Binance ({_fmt(pos.initial_qty)} {bot.base_asset}) "
+                      "não é mais acompanhada: se ainda tiver essas moedas lá, venda manualmente na Binance.")  # fmt: skip
+        if bot.mode == "live" and bot.status == "running":
+            bot.status = "stopped"
+            bot.status_reason = "Migrado da Binance para a OKX: confira as chaves da OKX em Configurações e ligue de novo."
+        bot.exchange = EXCHANGE
+        bot.last_candle_time = None
+        add_event(db, bot.id, "info", "Bot migrado para a OKX (a Binance foi removida do sistema). Preços e ordens agora vêm da OKX.")
+    for cred in db.scalars(select(Credential).where(Credential.provider == "binance")):
+        audit(db, cred.user_id, "binance_keys_removed", None, "Binance removida do sistema")
+        db.delete(cred)
+    return moved
 
 
 def _fmt(v: float) -> str:
@@ -72,7 +126,7 @@ def _signed(v: float) -> str:
 class BotService:
     """Operações de um bot dentro de uma sessão de banco."""
 
-    def __init__(self, db: Session, bot: Bot, market: MarketData, trader):
+    def __init__(self, db: Session, bot: Bot, market: OkxMarketData, trader):
         self.db = db
         self.bot = bot
         self.market = market
@@ -143,7 +197,7 @@ class BotService:
         params = strategy.resolve_params(self.bot.strategy_params)
         df = self.market.klines(self.bot.symbol, self.bot.interval, limit=strategy.warmup(params) + 10)
         if df.empty or (expected_candle is not None and int(df["time"].iloc[-1]) < expected_candle):
-            return  # a Binance ainda não publicou o candle; tenta no próximo ciclo
+            return  # a OKX ainda não publicou o candle; tenta no próximo ciclo
 
         out = strategy.run(df, params)
         snap = out.snapshot(-1)
@@ -236,7 +290,7 @@ class BotService:
         if size < rules.min_notional * 1.02:
             self.event(
                 "warn",
-                f"Compra não enviada: tamanho {_fmt(size)} {rules.quote} abaixo do mínimo da Binance "
+                f"Compra não enviada: tamanho {_fmt(size)} {rules.quote} abaixo do mínimo da OKX "
                 f"({_fmt(rules.min_notional)}) ou saldo insuficiente ({_fmt(available)}).",
             )
             return None
@@ -289,7 +343,7 @@ class BotService:
 
         if not rules.is_tradeable(qty, price):
             if fraction >= 1.0:
-                # resto pequeno demais para a Binance vender: encerra o registro
+                # resto pequeno demais para a OKX vender: encerra o registro
                 self._write_off(pos, price)
                 self._close(pos, reason)
                 self.event("warn", f"Posição encerrada com resto abaixo do mínimo negociável ({_fmt(qty)} {rules.base}).")
@@ -389,6 +443,7 @@ REASON_LABELS = {
     "take_profit": "alvo parcial",
     "manual": "manual",
     "news": "notícia negativa",
+    "migrated": "migrada da Binance",
 }
 
 
@@ -408,10 +463,10 @@ class BotRunner(threading.Thread):
     def stop(self) -> None:
         self.stop_event.set()
 
-    def _trader_for(self, db: Session, bot: Bot, market: MarketData):
+    def _trader_for(self, db: Session, bot: Bot, market: OkxMarketData):
         if bot.mode == "paper":
             return self.manager.paper_trader_factory(market, RiskConfig(**(bot.risk or {})).fee_pct)
-        cred = binance_credential(db, bot.user_id)
+        cred = okx_credential(db, bot.user_id)
         key = (cred.id, cred.updated_at) if cred else None
         if self._trader is None or self._trader_key != key:
             self._trader = self.manager.live_trader_factory(db, bot)
@@ -482,7 +537,7 @@ class BotManager:
         self.live_trader_factory = make_live_trader
         self.paper_trader_factory = lambda market, fee_pct: PaperTrader(market, fee_pct)
 
-    def market_for(self, db: Session, bot: Bot) -> MarketData:
+    def market_for(self, db: Session, bot: Bot) -> OkxMarketData:
         return self.market_factory(db, bot)
 
     def bot_lock(self, bot_id: int) -> threading.Lock:

@@ -76,7 +76,7 @@ function ProfileCard({ profile, active, onPick }: { profile: Profile; active: bo
         <Metric label="Operações" value={`~${s.trades_per_period}`} sub={`em ${period}`} />
         <Metric label="Queda máx. média" value={pct(s.avg_drawdown_pct)} info="Quanto o capital caiu, do pico ao fundo, em média, durante os testes. Mede o quanto você precisa aguentar no caminho." />
         {s.median_return_bnb_pct != null ? (
-          <Metric label="Pagando taxa com BNB" value={<Pnl value={s.median_return_bnb_pct} percent />} info="Mesmo teste com a taxa reduzida da Binance (0,075%) e slippage menor, como em pares com muita liquidez." />
+          <Metric label="Com taxa reduzida" value={<Pnl value={s.median_return_bnb_pct} percent />} info="Mesmo teste com taxa menor (0,075%, como nos níveis VIP da corretora) e slippage menor, como em pares com muita liquidez." />
         ) : (
           <Metric label="Só segurar a moeda" value={pct(s.buy_hold_median_pct, true)} sub="mesmo período" info="Quanto teria rendido só comprar e segurar, nos mesmos testes." />
         )}
@@ -118,7 +118,7 @@ export function ProfilePicker({ selected, onPick }: { selected: string | null; o
         ))}
       </div>
       <p className="text-xs text-muted">
-        Números de backtest com dados reais da Binance em 14 pares, já com taxa de 0,1% e slippage, investindo 100% do capital em cada operação. Com valores
+        Números de backtest com histórico real de 14 pares, já com taxa de 0,1% e slippage, investindo 100% do capital em cada operação. Com valores
         fixos menores por compra, as oscilações da sua carteira são proporcionalmente menores. Resultado passado não garante resultado futuro.
       </p>
     </div>
