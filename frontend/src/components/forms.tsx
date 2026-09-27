@@ -19,7 +19,7 @@ export function useSymbols() {
   });
 }
 
-export const INTERVALS = ["15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"];
+export const INTERVALS = ["5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"];
 
 export type Params = Record<string, number | boolean | string>;
 
@@ -31,7 +31,7 @@ export function defaultParams(s: StrategyInfo | undefined): Params {
 export const HELP = {
   symbol: "Moeda que será comprada e vendida, cotada em dólar (USDT). Ex.: BTCUSDT = Bitcoin, SOLUSDT = Solana.",
   interval:
-    "Cada candle resume o preço nesse intervalo, e a estratégia decide a cada candle fechado. Recomendado: 4 horas. Nos testes, 1 hora ou menos perdeu para o ruído e as taxas em quase todas as estratégias.",
+    "Cada candle resume o preço nesse intervalo, e a estratégia decide a cada candle fechado. 5-15 min = operações de minutos (nível Rápido, que perdeu nos testes por causa das taxas); 1-2 h = operações de horas (Médio); 4 h e 1 dia = operações de dias (Lento, o melhor resultado).",
 };
 
 export function StrategyPicker({ strategies, value, onChange }: { strategies: StrategyInfo[]; value: string; onChange: (key: string) => void }) {

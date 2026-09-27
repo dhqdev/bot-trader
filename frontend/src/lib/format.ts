@@ -103,3 +103,19 @@ export const INTERVAL_LABELS: Record<string, string> = {
 export const INTERVAL_MINUTES_MAP: Record<string, number> = {
   "1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "2h": 120, "4h": 240, "6h": 360, "8h": 480, "12h": 720, "1d": 1440,
 };
+
+/** Duração típica de uma operação: "46 min", "16 h", "3 dias", "3 semanas". */
+export function holdingTime(minutes: number): string {
+  if (minutes < 90) return `${Math.round(minutes)} min`;
+  const hours = minutes / 60;
+  if (hours < 36) return `${Math.round(hours)} h`;
+  const days = hours / 24;
+  if (days < 14) return `${Math.round(days)} dias`;
+  return `${Math.round(days / 7)} semanas`;
+}
+
+export const TIER_OF_INTERVAL: Record<string, "rapido" | "medio" | "lento"> = {
+  "1m": "rapido", "3m": "rapido", "5m": "rapido", "15m": "rapido",
+  "30m": "medio", "1h": "medio", "2h": "medio",
+  "4h": "lento", "6h": "lento", "8h": "lento", "12h": "lento", "1d": "lento",
+};

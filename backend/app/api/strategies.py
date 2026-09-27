@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
+from app.core.profiles import profiles_payload
 from app.core.risk import RiskConfig
 from app.core.strategies import DEFAULT_INTERVAL, DEFAULT_STRATEGY, STRATEGIES
 from app.deps import get_current_user
@@ -19,6 +20,12 @@ def list_strategies():
         "strategies": [s.describe() for s in STRATEGIES.values()],
         "default_risk": RiskConfig().model_dump(),
     }
+
+
+@router.get("/profiles")
+def list_profiles():
+    """Perfis prontos em 3 níveis (Rápido, Médio, Lento), com os números dos testes."""
+    return profiles_payload()
 
 
 @router.post("/backtest")

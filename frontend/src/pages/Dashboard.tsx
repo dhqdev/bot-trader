@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ModeBadge, StatusBadge, EventsList, PositionsTable } from "../components/bot";
 import { DailyPnlChart, EquityChart } from "../components/charts";
+import { TierBadge } from "../components/profiles";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Pnl, Segmented, Stat } from "../components/ui";
 import { api } from "../lib/api";
 import { duration, money, num, pct, signedMoney } from "../lib/format";
@@ -132,7 +133,28 @@ export function DashboardPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card title="Bots" className="lg:col-span-2" action={<Link to="/bots/new" className="text-xs text-accent hover:underline">+ Novo bot</Link>} padded={false}>
-          <div className="overflow-x-auto px-4 pb-2">
+          {/* celular: cartões */}
+          <ul className="divide-y divide-line md:hidden">
+            {data.bots.map((b) => (
+              <li key={b.id}>
+                <Link to={`/bots/${b.id}`} className="flex items-center justify-between gap-3 px-4 py-3 active:bg-surface-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-ink">{b.name}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                      <StatusBadge bot={b} />
+                      <TierBadge interval={b.interval} />
+                      <ModeBadge mode={b.mode} />
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <Pnl value={b.stats.total_pnl} quote={b.quote_asset} className="text-sm font-semibold" />
+                    <div className="text-xs text-muted">{b.stats.trades} operações{b.position ? " · 1 aberta" : ""}</div>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto px-4 pb-2 md:block">
             <table className="w-full text-sm tabular">
               <thead>
                 <tr className="border-b border-line text-left text-xs text-ink-2">
@@ -149,7 +171,7 @@ export function DashboardPage() {
                   <tr key={b.id} className="cursor-pointer hover:bg-surface-2" onClick={() => navigate(`/bots/${b.id}`)}>
                     <td className="py-2.5 pr-3">
                       <div className="font-medium text-ink">{b.name}</div>
-                      <div className="flex items-center gap-1.5 text-xs text-muted">{b.symbol} · {b.interval} <ModeBadge mode={b.mode} /></div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted">{b.symbol} · {b.interval} <TierBadge interval={b.interval} /> <ModeBadge mode={b.mode} /></div>
                     </td>
                     <td className="py-2.5 pr-3 text-ink-2">{b.strategy_name}</td>
                     <td className="py-2.5 pr-3"><StatusBadge bot={b} /></td>

@@ -234,7 +234,7 @@ export function AIPage() {
                 }}
                 rows={2}
                 placeholder="Pergunte algo… (Enter envia, Shift+Enter quebra linha)"
-                className="min-h-[44px] flex-1 resize-y rounded-lg border border-line bg-page px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+                className="min-h-[44px] flex-1 resize-y rounded-lg border border-line bg-page px-3 py-2 text-base text-ink placeholder:text-muted focus:border-accent focus:outline-none sm:text-sm"
               />
               {streaming ? (
                 <Button type="button" onClick={() => abortRef.current?.abort()} aria-label="Parar"><Square className="size-4" /></Button>

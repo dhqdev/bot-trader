@@ -91,7 +91,10 @@ def test_invalid_bot_input(client):
 
 def test_strategies_and_backtest(client):
     data = client.get("/api/strategies").json()
-    assert data["default"] == "squeeze" and data["default_interval"] == "4h" and len(data["strategies"]) == 6
+    assert data["default"] == "squeeze" and data["default_interval"] == "4h" and len(data["strategies"]) == 7
+    tiers = client.get("/api/profiles").json()["tiers"]
+    assert [t["key"] for t in tiers] == ["rapido", "medio", "lento"]
+    assert tiers[0]["warning"] and all(t["profiles"] for t in tiers)
     r = client.post("/api/backtest", json={"symbol": "SOLUSDT", "interval": "1h", "strategy": "squeeze", "days": 60})
     assert r.status_code == 200, r.text
     res = r.json()
@@ -106,3 +109,36 @@ def test_system_engine_toggle(client):
 def test_ai_requires_key(client):
     r = client.post("/api/ai/chat", json={"messages": [{"role": "user", "content": "oi"}]})
     assert r.status_code == 400
+
+
+def test_pwa_files_are_served(client, tmp_path, monkeypatch):
+    """Com o frontend compilado presente, manifesto e service worker saem com tipo e cache corretos."""
+    import importlib
+
+    from app import main as main_mod
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><title>t</title>", encoding="utf-8")
+    (dist / "sw.js").write_text("self.addEventListener('fetch', () => {});", encoding="utf-8")
+    (dist / "manifest.webmanifest").write_text('{"name": "Bot Trader"}', encoding="utf-8")
+    (dist / "assets" / "app-abc123.js").write_text("console.log(1)", encoding="utf-8")
+    monkeypatch.setenv("BT_FRONTEND_DIST", str(dist))
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        fresh = importlib.reload(main_mod)
+        with TestClient(fresh.app) as c:
+            r = c.get("/manifest.webmanifest")
+            assert r.status_code == 200 and r.headers["content-type"].startswith("application/manifest+json")
+            r = c.get("/sw.js")
+            assert r.status_code == 200 and "javascript" in r.headers["content-type"] and r.headers["cache-control"] == "no-cache"
+            assert "immutable" in c.get("/assets/app-abc123.js").headers["cache-control"]
+            r = c.get("/bots/123")  # rota da SPA devolve o index.html
+            assert r.status_code == 200 and "text/html" in r.headers["content-type"] and r.headers["cache-control"] == "no-cache"
+            assert c.get("/api/nao-existe").status_code == 404
+    finally:
+        monkeypatch.delenv("BT_FRONTEND_DIST")
+        get_settings.cache_clear()
+        importlib.reload(main_mod)

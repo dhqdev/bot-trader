@@ -1,4 +1,5 @@
 import logging
+import mimetypes
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -11,6 +12,9 @@ from app.api import api_router
 from app.config import get_settings
 from app.core.engine import manager
 from app.db import init_db
+
+mimetypes.add_type("application/manifest+json", ".webmanifest")
+mimetypes.add_type("text/javascript", ".js")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("bot_trader")
@@ -49,6 +53,13 @@ app.add_middleware(
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/assets/"):
+        # nomes com hash: o conteúdo nunca muda
+        response.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
+    elif not path.startswith("/api/") and (path in ("/sw.js", "/manifest.webmanifest") or "text/html" in response.headers.get("content-type", "")):
+        # service worker, manifesto e páginas sempre revalidados, para as atualizações chegarem
+        response.headers.setdefault("Cache-Control", "no-cache")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "same-origin")

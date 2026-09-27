@@ -66,3 +66,26 @@ def test_describe_is_serializable():
 
     for s in STRATEGIES.values():
         json.dumps(s.describe())
+
+
+def test_profiles_are_valid():
+    from app.core.exchange import INTERVAL_MINUTES
+    from app.core.profiles import PROFILES, TIERS, profiles_payload, tier_of
+
+    assert [t["key"] for t in TIERS] == ["rapido", "medio", "lento"]
+    payload = profiles_payload()
+    for tier in payload["tiers"]:
+        assert len(tier["profiles"]) >= 2
+        for prof in tier["profiles"]:
+            assert prof["interval"] in INTERVAL_MINUTES
+            assert tier_of(prof["interval"]) == tier["key"]
+            assert prof["strategy"] in STRATEGIES
+            assert prof["risk"]["stop_loss_mode"] in ("atr", "percent")
+    assert sum(1 for p in PROFILES if p.get("recommended")) == 1
+
+
+def test_htf_filter_only_restricts_entries(ohlcv):
+    base = STRATEGIES["ignition"].run(ohlcv)
+    filtered = STRATEGIES["ignition"].run(ohlcv, {"htf_ema": 300})
+    assert not (filtered.entry & ~base.entry).any()  # o filtro só remove entradas
+    assert (filtered.exit == base.exit).all()

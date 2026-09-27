@@ -5,11 +5,12 @@ import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { BacktestEquityChart, CandleChart } from "../components/charts";
 import { defaultParams, HELP, INTERVALS, ParamsForm, RiskForm, StrategyPicker, useStrategies, useSymbols, type Params } from "../components/forms";
+import { ProfilePicker } from "../components/profiles";
 import { Button, Card, Empty, ErrorBox, Field, InfoTip, Input, Loading, PageHeader, Pnl, Select, Stat } from "../components/ui";
 import { api } from "../lib/api";
 import { dateTime, duration, INTERVAL_LABELS, INTERVAL_MINUTES_MAP, num, pct, price, REASONS } from "../lib/format";
-import type { BacktestMetrics, BacktestResult, ChartMarker, CompareRow, RiskConfig } from "../lib/types";
-import type { BotDraft } from "./BotForm";
+import type { BacktestMetrics, BacktestResult, ChartMarker, CompareRow, Profile, RiskConfig } from "../lib/types";
+import { mergeProfileRisk, type BotDraft } from "./BotForm";
 
 // ------------------------------------------------------------------ explicações
 
@@ -98,10 +99,11 @@ function Guide() {
             pontos em que o bot compraria, paga taxa e slippage, e respeita stop e alvos. Nenhum dinheiro é usado.
           </p>
           <ol className="list-decimal space-y-1.5 pl-5">
-            <li><strong className="text-ink">Mercado:</strong> escolha o par, o tempo do candle (recomendado: 4 horas) e quantos dias simular.</li>
-            <li><strong className="text-ink">Estratégia:</strong> escolha uma das 6. Os parâmetros já vêm com os melhores valores dos testes.</li>
+            <li><strong className="text-ink">Nível:</strong> escolha um perfil pronto: Rápido (minutos), Médio (horas) ou Lento (dias). Ele preenche o resto.</li>
+            <li><strong className="text-ink">Mercado:</strong> escolha o par e quantos dias simular (o tempo do candle vem do perfil).</li>
+            <li><strong className="text-ink">Estratégia:</strong> opcional, ajuste a estratégia e os parâmetros. Eles já vêm com os melhores valores dos testes.</li>
             <li><strong className="text-ink">Rodar backtest:</strong> veja o retorno, compare com o buy & hold e leia a análise automática logo abaixo.</li>
-            <li><strong className="text-ink">Comparar todas:</strong> roda as 6 estratégias no mesmo par e período e mostra um ranking.</li>
+            <li><strong className="text-ink">Comparar todas:</strong> roda todas as estratégias no mesmo par e período e mostra um ranking.</li>
             <li><strong className="text-ink">Confirmar:</strong> repita em outro período e em outros pares. Só então use "Criar bot" (em modo simulado).</li>
           </ol>
           <p className="text-xs text-muted">Clique ou toque no ícone (i) ao lado de cada número do resultado para ver o que ele significa.</p>
@@ -206,6 +208,7 @@ export function LabPage() {
   const [params, setParams] = useState<Params | null>(draft?.params ?? null);
   const [risk, setRisk] = useState<RiskConfig | null>(draft ? { ...draft.risk, sizing_mode: "percent_balance", balance_percent: 100 } : null);
   const [showRisk, setShowRisk] = useState(false);
+  const [profileKey, setProfileKey] = useState<string | null>(draft ? (draft.profile ?? null) : "lento_squeeze_4h");
 
   const run = useMutation({ mutationFn: (body: object) => api.post<BacktestResult>("/backtest", body) });
   const compare = useMutation({ mutationFn: (body: object) => api.post<CompareRow[]>("/backtest/compare", body) });
@@ -234,7 +237,17 @@ export function LabPage() {
     run.mutate({ symbol, interval, strategy: key, params: currentParams, risk: currentRisk, days, initial_capital: capital });
   }
 
-  const maxDays = Math.min(730, Math.floor((20000 * (INTERVAL_MINUTES_MAP[interval] ?? 60)) / 1440));
+  const maxDaysFor = (itv: string) => Math.min(730, Math.floor((20000 * (INTERVAL_MINUTES_MAP[itv] ?? 60)) / 1440));
+  const maxDays = maxDaysFor(interval);
+
+  function applyProfile(profile: Profile) {
+    setProfileKey(profile.key);
+    setTimeframe(profile.interval);
+    setDays(Math.min(profile.stats.period_days, maxDaysFor(profile.interval)));
+    setStrategy(profile.strategy);
+    setParams(profile.params);
+    setRisk({ ...mergeProfileRisk(currentRisk!, profile), sizing_mode: "percent_balance", balance_percent: 100 });
+  }
 
   return (
     <>
@@ -243,14 +256,24 @@ export function LabPage() {
         <Guide />
       </div>
       <form onSubmit={submit} className="space-y-4">
-        <Card title="1. Mercado e período">
+        <Card title="1. Nível de risco e prazo">
+          <ProfilePicker selected={profileKey} onPick={applyProfile} />
+        </Card>
+
+        <Card title="2. Mercado e período">
           <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Par" help={HELP.symbol}>
               <Input list="lab-symbols" value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase().replace("/", ""))} required />
               <datalist id="lab-symbols">{symbols.data?.map((s) => <option key={s.symbol} value={s.symbol} />)}</datalist>
             </Field>
             <Field label="Tempo do candle" help={HELP.interval}>
-              <Select value={interval} onChange={(e) => setTimeframe(e.target.value)}>
+              <Select
+                value={interval}
+                onChange={(e) => {
+                  setTimeframe(e.target.value);
+                  setProfileKey(null);
+                }}
+              >
                 {INTERVALS.map((i) => (
                   <option key={i} value={i}>
                     {INTERVAL_LABELS[i]}
@@ -268,8 +291,8 @@ export function LabPage() {
           </div>
         </Card>
 
-        <Card title="2. Estratégia">
-          <StrategyPicker strategies={data.strategies} value={key} onChange={(k) => { setStrategy(k); setParams(defaultParams(data.strategies.find((s) => s.key === k))); }} />
+        <Card title="3. Estratégia">
+          <StrategyPicker strategies={data.strategies} value={key} onChange={(k) => { setStrategy(k); setParams(defaultParams(data.strategies.find((s) => s.key === k))); setProfileKey(null); }} />
           {info && (
             <div className="mt-5 space-y-4 border-t border-line pt-4">
               <p className="text-sm text-ink-2">{info.description}</p>
@@ -281,7 +304,7 @@ export function LabPage() {
         <Card>
           <button type="button" className="flex w-full items-center justify-between text-left" onClick={() => setShowRisk(!showRisk)}>
             <span>
-              <span className="block text-sm font-semibold">3. Gerenciamento de risco</span>
+              <span className="block text-sm font-semibold">4. Gerenciamento de risco</span>
               <span className="mt-0.5 block text-xs text-ink-2">Stop loss, alvos, tamanho da posição e taxa. Os padrões foram os que deram melhor resultado nos testes.</span>
             </span>
             <ChevronDown className={clsx("size-4 shrink-0 text-muted transition-transform", showRisk && "rotate-180")} />
@@ -320,7 +343,7 @@ export function LabPage() {
               <Button onClick={() => navigate("/ai", { state: { backtest: result, prompt: "Analise este backtest: os resultados são confiáveis? O que você mudaria? Valide suas sugestões com novos backtests, inclusive em outros períodos." } })}>
                 <Sparkles className="size-4" />Analisar com IA
               </Button>
-              <Button variant="primary" onClick={() => navigate("/bots/new", { state: { draft: { symbol: result.request.symbol, interval: result.request.interval, strategy: result.request.strategy, params: result.request.params, risk: result.request.risk } satisfies BotDraft } })}>
+              <Button variant="primary" onClick={() => navigate("/bots/new", { state: { draft: { symbol: result.request.symbol, interval: result.request.interval, strategy: result.request.strategy, params: result.request.params, risk: result.request.risk, profile: profileKey } satisfies BotDraft } })}>
                 <BotIcon className="size-4" />Criar bot com esta configuração
               </Button>
             </div>

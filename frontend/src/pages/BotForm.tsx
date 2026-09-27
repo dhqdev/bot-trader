@@ -3,10 +3,11 @@ import { AlertTriangle, FlaskConical } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { defaultParams, HELP, INTERVALS, ParamsForm, RiskForm, StrategyPicker, useStrategies, useSymbols, type Params } from "../components/forms";
+import { ProfilePicker } from "../components/profiles";
 import { Button, Card, ErrorBox, Field, Input, Loading, PageHeader, Segmented, Select } from "../components/ui";
 import { api } from "../lib/api";
-import { INTERVAL_LABELS } from "../lib/format";
-import type { Bot, Credentials, Mode, RiskConfig } from "../lib/types";
+import { INTERVAL_LABELS, TIER_OF_INTERVAL } from "../lib/format";
+import type { Bot, Credentials, Mode, Profile, RiskConfig, Tier } from "../lib/types";
 
 export interface BotDraft {
   name?: string;
@@ -15,6 +16,21 @@ export interface BotDraft {
   strategy: string;
   params: Params;
   risk: RiskConfig;
+  profile?: string | null;
+}
+
+/** Aplica as regras de risco do perfil, preservando tamanho da posição, limites e taxa escolhidos pelo usuário. */
+export function mergeProfileRisk(current: RiskConfig, profile: Profile): RiskConfig {
+  return {
+    ...profile.risk,
+    sizing_mode: current.sizing_mode,
+    order_size_quote: current.order_size_quote,
+    balance_percent: current.balance_percent,
+    risk_percent: current.risk_percent,
+    max_position_quote: current.max_position_quote,
+    max_daily_loss_quote: current.max_daily_loss_quote,
+    fee_pct: current.fee_pct,
+  };
 }
 
 export function BotFormPage() {
@@ -37,6 +53,8 @@ export function BotFormPage() {
   const [strategy, setStrategy] = useState("");
   const [params, setParams] = useState<Params>({});
   const [risk, setRisk] = useState<RiskConfig | null>(null);
+  const [profileKey, setProfileKey] = useState<string | null>(null);
+  const [ackFast, setAckFast] = useState(false);
   const [ready, setReady] = useState(false);
 
   // preenche o formulário: bot existente, rascunho vindo do laboratório ou padrões
@@ -59,12 +77,14 @@ export function BotFormPage() {
       setStrategy(draft.strategy);
       setParams(draft.params);
       setRisk({ ...draft.risk, sizing_mode: "fixed_quote" });
+      setProfileKey(draft.profile ?? null);
     } else {
       const key = strategies.data.default;
       setTimeframe(strategies.data.default_interval);
       setStrategy(key);
       setParams(defaultParams(strategies.data.strategies.find((s) => s.key === key)));
       setRisk(strategies.data.default_risk);
+      setProfileKey("lento_squeeze_4h");
     }
     setReady(true);
   }, [ready, strategies.data, existing.data, editing, draft]);
@@ -88,31 +108,51 @@ export function BotFormPage() {
   const strategyInfo = strategies.data!.strategies.find((s) => s.key === strategy);
   const quote = symbol.endsWith("USDT") ? "USDT" : "";
   const liveWithoutKeys = mode === "live" && creds.data && !creds.data.binance.configured;
+  const fastLive = mode === "live" && TIER_OF_INTERVAL[interval] === "rapido";
+  const blocked = Boolean(liveWithoutKeys) || (fastLive && !ackFast);
+
+  function applyProfile(profile: Profile, tier: Tier) {
+    setProfileKey(profile.key);
+    setTimeframe(profile.interval);
+    setStrategy(profile.strategy);
+    setParams(profile.params);
+    setRisk((current) => mergeProfileRisk(current ?? profile.risk, profile));
+    if (tier.key === "rapido" && !editing) setMode("paper"); // nível experimental começa no simulado
+  }
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    save.mutate();
+    if (!blocked) save.mutate();
   }
 
   function openLab() {
-    navigate("/lab", { state: { draft: { symbol, interval, strategy, params, risk: risk! } satisfies BotDraft } });
+    navigate("/lab", { state: { draft: { symbol, interval, strategy, params, risk: risk!, profile: profileKey } satisfies BotDraft } });
   }
 
   return (
     <form onSubmit={submit}>
       <PageHeader
         title={editing ? `Editar ${existing.data?.name ?? "bot"}` : "Novo bot"}
-        subtitle={editing ? "As mudanças valem a partir do próximo ciclo." : "Configure, teste no laboratório e só então ligue."}
+        subtitle={editing ? "As mudanças valem a partir do próximo ciclo." : "Escolha o nível, teste no laboratório e só então ligue."}
         actions={
           <>
             <Button type="button" onClick={openLab}><FlaskConical className="size-4" />Testar no laboratório</Button>
-            <Button type="submit" variant="primary" loading={save.isPending} disabled={Boolean(liveWithoutKeys)}>
+            <Button type="submit" variant="primary" loading={save.isPending} disabled={blocked}>
               {editing ? "Salvar" : "Criar bot"}
             </Button>
           </>
         }
       />
       <div className="space-y-4">
+        <Card title="Nível de risco e prazo">
+          <p className="-mt-1 mb-4 text-xs text-ink-2">
+            Perfis prontos, testados no histórico: <strong className="text-ink">Rápido</strong> (operações de minutos),{" "}
+            <strong className="text-ink">Médio</strong> (horas) ou <strong className="text-ink">Lento</strong> (dias). Ao escolher, o tempo do candle, a
+            estratégia e o stop são preenchidos; o tamanho das compras continua o seu. Você pode ajustar tudo depois.
+          </p>
+          <ProfilePicker selected={profileKey} onPick={applyProfile} />
+        </Card>
+
         <Card title="Básico">
           <div className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Nome" help="Só para você identificar o bot.">
@@ -131,7 +171,13 @@ export function BotFormPage() {
               </datalist>
             </Field>
             <Field label="Tempo do candle" help={HELP.interval}>
-              <Select value={interval} onChange={(e) => setTimeframe(e.target.value)}>
+              <Select
+                value={interval}
+                onChange={(e) => {
+                  setTimeframe(e.target.value);
+                  setProfileKey(null);
+                }}
+              >
                 {INTERVALS.map((i) => (
                   <option key={i} value={i}>{INTERVAL_LABELS[i]}{i === strategies.data!.default_interval ? " (recomendado)" : ""}</option>
                 ))}
@@ -160,6 +206,15 @@ export function BotFormPage() {
               </span>
             )}
           </div>
+          {fastLive && (
+            <label className="mt-4 flex gap-3 rounded-lg border border-warn/40 p-3 text-sm text-ink-2">
+              <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-[var(--warn)]" checked={ackFast} onChange={(e) => setAckFast(e.target.checked)} />
+              <span>
+                <strong className="text-warn-text">Nível rápido com dinheiro real.</strong> Nos testes, todas as estratégias de minutos perderam dinheiro depois das
+                taxas. Entendo o risco e quero operar mesmo assim, com um valor que aceito perder.
+              </span>
+            </label>
+          )}
         </Card>
 
         <Card title="Estratégia">
@@ -170,6 +225,7 @@ export function BotFormPage() {
             onChange={(key) => {
               setStrategy(key);
               setParams(defaultParams(strategies.data!.strategies.find((s) => s.key === key)));
+              setProfileKey(null);
             }}
           />
           {strategyInfo && (

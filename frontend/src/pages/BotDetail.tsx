@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ChecksList, EventsList, ModeBadge, OpenPositionCard, OrdersTable, PositionsTable, StatusBadge } from "../components/bot";
 import { CandleChart } from "../components/charts";
+import { TierBadge } from "../components/profiles";
 import { useStrategies } from "../components/forms";
 import { Button, Card, Confirm, ErrorBox, Loading, PageHeader, Pnl, Stat, Tabs } from "../components/ui";
 import { api } from "../lib/api";
@@ -98,7 +99,7 @@ export function BotDetailPage() {
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-2">
-            {b.name} <ModeBadge mode={b.mode} /> <StatusBadge bot={b} />
+            {b.name} <ModeBadge mode={b.mode} /> <TierBadge interval={b.interval} /> <StatusBadge bot={b} />
           </span>
         }
         subtitle={`${b.symbol} · ${INTERVAL_LABELS[b.interval] ?? b.interval} · ${b.strategy_name}${b.last_tick_at ? ` · última checagem ${timeAgo(b.last_tick_at)}` : ""}`}

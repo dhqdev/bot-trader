@@ -32,6 +32,18 @@ def _trend_ok(df: pd.DataFrame, p: dict) -> tuple[pd.Series, pd.Series]:
     return ok, trend
 
 
+HTF_PARAM = Param(
+    "htf_ema", "Tendência de fundo: EMA de N candles", "int", 0, 0, 3000, 1,
+    help="Só compra com o preço acima de uma média bem longa e subindo, ou seja, a favor da tendência de vários dias. 0 = desligado. ≈ 4 dias: 1152 candles em 5m, 384 em 15m, 96 em 1h.",
+)  # fmt: skip
+
+
+def _htf_uptrend(close: pd.Series, bars: int) -> pd.Series:
+    """Tendência de fundo: preço acima de uma EMA longa que está subindo."""
+    slow = ta.ema(close, bars)
+    return (close > slow) & (slow > slow.shift(12))
+
+
 def _fresh(event: pd.Series, bars: int) -> pd.Series:
     """O evento aconteceu há no máximo `bars` candles (0 = neste candle)."""
     return ta.bars_since(event) <= bars
@@ -135,6 +147,7 @@ class IgnitionStrategy(Strategy):
               help="Sai quando o preço fecha abaixo desta média. Menor = sai mais rápido; maior = segura mais a tendência."),
         TREND_PARAM,
         USE_TREND_PARAM,
+        HTF_PARAM,
     ]  # fmt: skip
 
     def compute(self, df, p):
@@ -152,6 +165,8 @@ class IgnitionStrategy(Strategy):
             f"Fechou nos {100 - p['close_near_high']:g}% superiores do candle": close_pos >= p["close_near_high"],
             "Preço acima da EMA de tendência": trend_ok,
         }
+        if p["htf_ema"] > 0:
+            entry_conditions["Tendência de fundo em alta"] = _htf_uptrend(close, p["htf_ema"])
         exit_conditions = {f"Preço abaixo da EMA {p['exit_ema']}": close < exit_ema}
         overlays = {f"EMA {p['exit_ema']} (saída)": exit_ema}
         if p["use_trend_filter"]:
@@ -431,4 +446,56 @@ class HiLoRsiStrategy(Strategy):
             exit_conditions=exit_conditions,
             overlays=overlays,
             values={"RSI": r, "RSI média": r_sma, "ATR%": atr_pct},
+        )
+
+
+# ---------------------------------------------------------------------------
+# NÍVEL RÁPIDO (minutos)
+
+
+class RsiBounceStrategy(Strategy):
+    key = "rsi_bounce"
+    name = "Repique do RSI (rápida)"
+    style = "reversão"
+    description = (
+        "Feita para candles curtos (5m e 15m): compra quando o RSI curto sai de uma queda exagerada e vira "
+        "para cima, com o preço acima da EMA de tendência e, opcionalmente, da tendência de fundo. Vende "
+        "quando o RSI recupera. As operações duram minutos. Atenção: nos testes perdeu um pouco na maioria "
+        "dos casos, porque as taxas consomem o ganho de movimentos tão curtos. Use no modo simulado."
+    )
+    params = [
+        Param("rsi_period", "RSI: período", "int", 7, 2, 30, 1,
+              help="RSI curto reage rápido. 7 candles de 5m = 35 minutos."),
+        Param("level", "Compra quando o RSI estava abaixo de", "float", 20, 5, 40, 1,
+              help="Nível de queda exagerada. Menor = sinais mais raros e quedas mais fortes."),
+        Param("exit_level", "Vende quando o RSI passar de", "float", 60, 40, 90, 1,
+              help="Nível de recuperação para realizar o ganho."),
+        TREND_PARAM,
+        USE_TREND_PARAM,
+        HTF_PARAM,
+    ]  # fmt: skip
+
+    def compute(self, df, p):
+        close, open_ = df["close"], df["open"]
+        r = ta.rsi(close, p["rsi_period"])
+        trend_ok, trend = _trend_ok(df, p)
+        entry_conditions = {
+            f"RSI estava abaixo de {p['level']:g}": r.shift(1) < p["level"],
+            "RSI virou para cima": r > r.shift(1),
+            "Candle de alta": close > open_,
+            "Preço acima da EMA de tendência": trend_ok,
+        }
+        if p["htf_ema"] > 0:
+            entry_conditions["Tendência de fundo em alta"] = _htf_uptrend(close, p["htf_ema"])
+        exit_conditions = {f"RSI acima de {p['exit_level']:g}": r > p["exit_level"]}
+        overlays = {f"EMA {p['trend_ema']}": trend} if p["use_trend_filter"] else {}
+        if p["htf_ema"] > 0:
+            overlays[f"Tendência de fundo (EMA {p['htf_ema']})"] = ta.ema(close, p["htf_ema"])
+        return StrategyOutput(
+            entry=all_of(entry_conditions),
+            exit=any_of(exit_conditions),
+            entry_conditions=entry_conditions,
+            exit_conditions=exit_conditions,
+            overlays=overlays,
+            values={"RSI": r},
         )

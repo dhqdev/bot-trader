@@ -4,6 +4,7 @@ from app.core.strategies.library import (
     DonchianBreakoutStrategy,
     HiLoRsiStrategy,
     IgnitionStrategy,
+    RsiBounceStrategy,
     SqueezeBreakoutStrategy,
     VolMomentumStrategy,
 )
@@ -16,6 +17,7 @@ _ALL: list[Strategy] = [
     ConfluenceStrategy(),
     DonchianBreakoutStrategy(),
     HiLoRsiStrategy(),
+    RsiBounceStrategy(),  # nível rápido (experimental)
 ]
 
 STRATEGIES: dict[str, Strategy] = {s.key: s for s in _ALL}

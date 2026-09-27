@@ -30,6 +30,7 @@ import {
 } from "recharts";
 import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { dateTime, num, price, shortDate, signedMoney } from "../lib/format";
+import { useIsMobile } from "../lib/pwa";
 import type { Candle, ChartMarker, LinePoint } from "../lib/types";
 
 // ------------------------------------------------------------------ tokens
@@ -191,7 +192,7 @@ export interface PriceLine {
   kind: "entry" | "stop" | "target";
 }
 
-export function CandleChart({ candles, overlays = {}, markers = [], lines = [], height = 380 }: {
+export function CandleChart({ candles, overlays = {}, markers = [], lines = [], height: desiredHeight = 380 }: {
   candles: Candle[];
   overlays?: Record<string, LinePoint[]>;
   markers?: ChartMarker[];
@@ -203,6 +204,8 @@ export function CandleChart({ candles, overlays = {}, markers = [], lines = [], 
   const t = useTokens();
   const [hover, setHover] = useState<Candle | null>(null);
   const overlayNames = Object.keys(overlays);
+  const mobile = useIsMobile();
+  const height = mobile ? Math.min(desiredHeight, 300) : desiredHeight;
 
   useEffect(() => {
     if (!ref.current || candles.length === 0) return;

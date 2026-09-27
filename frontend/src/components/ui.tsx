@@ -68,7 +68,7 @@ export function Button({ variant = "secondary", size = "md", loading, className,
       {...rest}
       disabled={disabled || loading}
       className={clsx(
-        "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex shrink-0 items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         size === "sm" ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm",
         variant === "primary" && "bg-accent text-accent-ink hover:brightness-110",
@@ -121,7 +121,7 @@ export function Dot({ tone }: { tone: "good" | "bad" | "warn" | "neutral" }) {
 }
 
 const inputCls =
-  "h-9 w-full rounded-lg border border-line bg-page px-3 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none disabled:opacity-60";
+  "h-11 w-full rounded-lg border border-line bg-page px-3 text-base text-ink placeholder:text-muted focus:border-accent focus:outline-none disabled:opacity-60 sm:h-9 sm:text-sm";
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...rest} className={clsx(inputCls, className)} />;

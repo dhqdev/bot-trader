@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, KeyRound, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Download, KeyRound, ShieldCheck, Smartphone } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Badge, Button, Card, ErrorBox, Field, Input, Loading, PageHeader, Switch } from "../components/ui";
 import { api } from "../lib/api";
 import { dateTime, num } from "../lib/format";
+import { APP_VERSION, isIOS, isStandalone, useInstallPrompt } from "../lib/pwa";
 import type { Credentials } from "../lib/types";
 
 interface TestResult {
@@ -152,6 +153,41 @@ function AnthropicCard({ creds }: { creds: Credentials["anthropic"] }) {
   );
 }
 
+function InstallCard() {
+  const { canInstall, install } = useInstallPrompt();
+  const installed = isStandalone();
+  return (
+    <Card title="App no celular" action={installed ? <Badge tone="good"><CheckCircle2 className="size-3" />Instalado</Badge> : undefined}>
+      <div className="space-y-3 text-sm text-ink-2">
+        <p className="flex gap-2">
+          <Smartphone className="mt-0.5 size-4 shrink-0 text-accent" />
+          <span>
+            Instale o Bot Trader como app: ícone na tela inicial, abre em tela cheia e carrega mais rápido. Os bots continuam rodando no servidor mesmo com
+            o celular desligado.
+          </span>
+        </p>
+        {installed ? (
+          <p className="text-xs text-muted">Você já está usando a versão instalada (v{APP_VERSION}).</p>
+        ) : canInstall ? (
+          <Button variant="primary" onClick={install}><Download className="size-4" />Instalar app</Button>
+        ) : isIOS() ? (
+          <ol className="list-decimal space-y-1 pl-5 text-xs">
+            <li>Abra este site no <strong className="text-ink">Safari</strong>.</li>
+            <li>Toque em <strong className="text-ink">Compartilhar</strong> (quadrado com seta para cima).</li>
+            <li>Escolha <strong className="text-ink">Adicionar à Tela de Início</strong> e confirme.</li>
+          </ol>
+        ) : (
+          <ol className="list-decimal space-y-1 pl-5 text-xs">
+            <li>No Android, abra este site no <strong className="text-ink">Chrome</strong>.</li>
+            <li>Toque no menu <strong className="text-ink">⋮</strong> e escolha <strong className="text-ink">Instalar app</strong> (ou Adicionar à tela inicial).</li>
+            <li>No computador, use o ícone de instalar na barra de endereço do Chrome ou do Edge.</li>
+          </ol>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function PasswordCard() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -198,6 +234,7 @@ export function SettingsPage() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <BinanceCard creds={data.binance} />
           <div className="space-y-4">
+            <InstallCard />
             <AnthropicCard creds={data.anthropic} />
             <PasswordCard />
           </div>

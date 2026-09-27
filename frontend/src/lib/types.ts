@@ -336,3 +336,42 @@ export type AIEvent =
   | { type: "tool_done"; name: string; ok: boolean }
   | { type: "done"; model?: string; report_id?: number }
   | { type: "error"; message: string };
+
+export interface ProfileStats {
+  cases: number;
+  period_days: number;
+  median_return_pct: number;
+  profitable_pct: number;
+  avg_drawdown_pct: number;
+  worst_return_pct: number;
+  trades_per_period: number;
+  avg_trade_minutes: number;
+  win_rate_pct: number;
+  buy_hold_median_pct: number;
+  median_return_bnb_pct?: number;
+}
+
+export interface Profile {
+  key: string;
+  tier: "rapido" | "medio" | "lento";
+  name: string;
+  interval: string;
+  strategy: string;
+  strategy_name: string;
+  params: Record<string, number | boolean | string>;
+  risk: RiskConfig;
+  description: string;
+  recommended: boolean;
+  stats: ProfileStats;
+}
+
+export interface Tier {
+  key: "rapido" | "medio" | "lento";
+  name: string;
+  risk: "Alto" | "Médio" | "Baixo";
+  holding: string;
+  timeframes: string;
+  description: string;
+  warning: string | null;
+  profiles: Profile[];
+}

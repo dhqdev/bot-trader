@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Bot as BotIcon, Plus } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { ModeBadge, StatusBadge } from "../components/bot";
+import { TierBadge } from "../components/profiles";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Pnl } from "../components/ui";
 import { api } from "../lib/api";
 import { duration, pct, price } from "../lib/format";
@@ -35,7 +36,10 @@ export function BotsPage() {
                 <div className="truncate font-medium text-ink">{b.name}</div>
                 <div className="mt-0.5 text-xs text-muted">{b.symbol} · {b.interval} · {b.strategy_name}</div>
               </div>
-              <ModeBadge mode={b.mode} />
+              <div className="flex shrink-0 gap-1.5">
+                <TierBadge interval={b.interval} />
+                <ModeBadge mode={b.mode} />
+              </div>
             </div>
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>

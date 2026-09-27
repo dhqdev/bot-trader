@@ -54,6 +54,21 @@ Todas são long-only (só compram) e avaliadas **apenas em candles fechados**. O
 
 Cada parâmetro tem, na tela, a explicação do que faz e a faixa aceita. O Laboratório tem um guia de uso e uma leitura automática do resultado.
 
+### Níveis: Rápido, Médio e Lento
+
+Ao criar um bot (ou no Laboratório), escolha um **perfil pronto**. Ele preenche o tempo do candle, a estratégia e o stop; o tamanho das compras continua o seu. Números medidos com o código de produção, dados reais de 14 pares, taxa de 0,1% e slippage:
+
+| Nível | Perfil | Candle | Cada operação dura | Resultado típico | Casos com lucro |
+|---|---|---|---|---|---|
+| **Rápido** (risco alto, experimental) | Repique rápido | 5 min | ~46 min | −3,4% em 45 dias | 4% |
+| | Ignição rápida | 15 min | ~1,5 h | −13,8% em 4 meses | 0% |
+| **Médio** (risco médio) | Ignição 1h | 1 h | ~17 h | +2,7% em 6 meses | 55% |
+| | HiLo 2h com trailing | 2 h | ~21 h | +0,7% em 8 meses | 57% |
+| **Lento** (risco baixo) | **Squeeze 4h** (recomendado) | 4 h | ~3 dias | +20,9% em 1 ano | 71% |
+| | Confluência diária | 1 dia | ~3 semanas | +23,6% em 18 meses | 77% |
+
+**Sobre o nível Rápido:** nos testes, **nenhuma** estratégia de minutos lucrou depois dos custos. Foram 9 estratégias, 3 regras de risco, candles de 5 e 15 minutos e 14 pares. Cada operação paga cerca de 0,3% entre taxa e slippage, e os movimentos de poucos minutos costumam ser menores que isso. Mesmo pagando a taxa com BNB (0,075%), a melhor ficou em −1,5%. O nível existe porque você pode querer testá-lo, mas começa no modo simulado, e usá-lo com dinheiro real exige uma confirmação explícita.
+
 ### Como foram escolhidas (e o que esperar)
 
 Backtests com dados reais da Binance em 14 pares, em candles de 1h (180 dias) e 4h (365 dias), com 3 períodos seguidos (83 casos). Taxa de 0,1%, slippage de 0,05% e o risco padrão.
@@ -91,6 +106,15 @@ O que isso significa:
 - **Disciplina:** pausa após saída e perda diária máxima (bloqueia novas compras no dia).
 - Stops e alvos são conferidos a cada ~15 s com o preço atual, não só no fechamento do candle.
 - Cada bot só vende o que ele mesmo comprou; ativos que já estão na sua carteira não são tocados.
+
+## App no celular (PWA)
+
+O Bot Trader pode ser instalado como app, com ícone na tela inicial e abrindo em tela cheia:
+
+- **Android / Chrome / Edge:** botão **Instalar app** no topo (ou em Configurações → App no celular).
+- **iPhone:** no Safari, **Compartilhar → Adicionar à Tela de Início**.
+
+No celular, a navegação fica numa barra inferior, as tabelas viram listas e os campos não dão zoom ao tocar. A interface fica em cache e abre mesmo sem internet. Os **dados** (saldo, posições, ordens) nunca ficam em cache: vêm sempre ao vivo do servidor. Quando uma versão nova é publicada, aparece o aviso "Nova versão disponível".
 
 ## Produção
 
@@ -151,7 +175,7 @@ backend/
     api/             rotas REST (auth, bots, painel, mercado, backtest, IA, configurações)
     services/        estatísticas, backtests, análise de mercado, agente de IA
     models.py        tabelas (SQLAlchemy): usuários, chaves, bots, posições, ordens, eventos, relatórios
-  tests/             66 testes: indicadores, ausência de look-ahead, risco, backtest, motor, API, IA
+  tests/             74 testes: indicadores, ausência de look-ahead, risco, backtest, motor, API, IA
 frontend/            React + Vite + TypeScript + Tailwind (lightweight-charts e Recharts)
 legacy/              código antigo, preservado para consulta (pode apagar)
 deploy/portainer-swarm-traefik.yml   stack Swarm + Traefik (trade.tekvosoft.com)

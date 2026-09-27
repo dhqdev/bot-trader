@@ -97,7 +97,29 @@ export function EventsList({ events, showBot }: { events: BotEvent[]; showBot?: 
 export function PositionsTable({ positions, quote, showBot, compact }: { positions: Position[]; quote?: string; showBot?: boolean; compact?: boolean }) {
   if (!positions.length) return <Empty title="Nenhuma operação ainda" />;
   return (
-    <div className="overflow-x-auto">
+    <>
+    {/* celular: lista compacta */}
+    <ul className="divide-y divide-line md:hidden">
+      {positions.map((p) => {
+        const open = p.status === "open";
+        return (
+          <li key={p.id} className="flex items-start justify-between gap-3 py-2.5 text-sm">
+            <div className="min-w-0">
+              <div className="truncate text-ink">{showBot ? p.bot_name : dateTime(p.entry_time)}</div>
+              <div className="text-xs text-muted tabular">
+                {price(p.entry_price)} → {open ? "aberta" : price(p.exit_price)}
+                {!open && ` · ${REASONS[p.exit_reason] ?? p.exit_reason}`} · {duration(p.duration_seconds)}
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <Pnl value={open ? p.unrealized_pnl : p.pnl_quote} quote={quote} className="font-medium" />
+              <div className="text-xs text-muted">{pct(open ? p.unrealized_pct : p.pnl_pct, true)}</div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+    <div className="hidden overflow-x-auto md:block">
       <table className="w-full text-sm tabular">
         <thead>
           <tr className="border-b border-line text-left text-xs text-ink-2">
@@ -135,6 +157,7 @@ export function PositionsTable({ positions, quote, showBot, compact }: { positio
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
