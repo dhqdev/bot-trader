@@ -332,6 +332,10 @@ function LiveModal({ open, onClose, data }: { open: boolean; onClose: () => void
 function OffView({ data }: { data: AutoOverview }) {
   const act = useAutoAction();
   const [live, setLive] = useState(false);
+  const L = data.limits;
+  const [budget, setBudget] = useState(String(data.config.mode === "paper" ? data.config.budget : L.default_paper_budget));
+  const value = Number(budget.replace(",", "."));
+  const valid = Number.isFinite(value) && value >= L.min_per_robot;
   return (
     <div className="space-y-4">
       <Card>
@@ -353,16 +357,20 @@ function OffView({ data }: { data: AutoOverview }) {
               </li>
             ))}
           </ol>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="primary" onClick={() => act.mutate({ path: "start", body: { mode: "paper" } })} loading={act.isPending}>
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Valor simulado (USDT)" className="w-40">
+              <Input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} />
+            </Field>
+            <Button variant="primary" onClick={() => act.mutate({ path: "start", body: { mode: "paper", budget: value } })} loading={act.isPending} disabled={!valid}>
               <Power className="size-4" />
               Ligar no simulado
             </Button>
             <Button onClick={() => setLive(true)}>Usar dinheiro real</Button>
           </div>
+          {!valid && <p className="text-xs text-bad-text">O mínimo é {money(L.min_per_robot)}.</p>}
           <p className="text-xs text-muted">
-            No simulado a IA usa {money(data.limits.default_paper_budget)} de mentira, com preços reais, taxas e slippage. Sem risco: deixe rodar alguns dias e veja
-            se ela ganha antes de passar para o real.
+            No simulado a IA opera no mercado real da OKX, com os preços ao vivo, a taxa da sua conta e slippage, mas com esse valor de mentira: não usa o seu
+            saldo. Deixe rodar alguns dias e veja se ela ganha antes de passar para o real.
           </p>
           {!data.ai_configured && (
             <p className="text-xs text-warn-text">

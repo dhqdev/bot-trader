@@ -156,6 +156,14 @@ def test_turning_on_picks_diversified_approved_robots(api):
     assert api.post("/api/auto/start", json={"budget": 4}).status_code == 422  # menos de 5 USDT não dá nem um robô
 
 
+def test_simulation_uses_the_chosen_amount(api):
+    cfg = api.post("/api/auto/start", json={"mode": "paper", "budget": 9.39}).json()["config"]
+    assert cfg["mode"] == "paper" and cfg["budget"] == 9.39 and cfg["slots"] == 1
+    [(ar, bot)] = _robots("active")  # com 9,39 USDT cabe um robô só, com tudo
+    assert bot.mode == "paper" and ar.allocation == 9.39
+    assert bot.paper_initial_balance == 9.39 and bot.risk["order_size_quote"] == 9.39
+
+
 def test_small_budgets_use_fewer_robots():
     def split(budget: float) -> tuple[int, float]:
         cfg = AutoTrader(budget=budget, max_robots=autotrade.MAX_ROBOTS)

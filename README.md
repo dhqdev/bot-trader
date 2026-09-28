@@ -25,7 +25,7 @@ Se o PowerShell bloquear: `powershell -ExecutionPolicy Bypass -File .\start.ps1`
 
 1. **Crie sua conta.** O primeiro cadastro vira o dono do sistema; depois disso o cadastro fecha.
 2. **Configurações:** ative a **verificação em duas etapas** e cadastre a chave de API da **OKX** (veja "Chave da OKX" abaixo) e, se quiser a IA, a chave do Claude/Anthropic ou do GPT/OpenAI. Tudo fica criptografado no banco e nunca volta para a tela; chaves da OKX com permissão de saque são recusadas.
-3. **Automático → Ligar no simulado.** Pronto: a IA faz o resto (ver "Modo automático" abaixo). Ela usa preços reais, com taxa e slippage, sem gastar dinheiro. Quando estiver confiante, toque em **Usar dinheiro real**.
+3. **Automático → escolha o valor simulado → Ligar no simulado.** Pronto: a IA faz o resto (ver "Modo automático" abaixo). Ela opera no mercado real da OKX (preços ao vivo, taxa da sua conta e slippage) com esse valor de mentira, sem gastar dinheiro. Quando estiver confiante, toque em **Usar dinheiro real**.
 4. Ou, se quiser escolher você mesmo: **Robôs → Novo robô**, escolha a moeda, o valor por operação e a volatilidade, e toque em **Usar** no robô do ranking.
 5. Acompanhe pelo **Painel**.
 
@@ -37,7 +37,7 @@ O botão **Sistema ligado/desligado**, no topo, para ou retoma todos os robôs d
 - **Painel:** resultado total (realizado + em aberto), hoje, taxa de acerto, curva de resultado acumulado, resultado por dia, robôs, resultado por estratégia, carteira da OKX, humor do mercado com as notícias fortes do momento, últimas operações e atividade. Separa **Real** de **Simulado**.
 - **Robôs:** um cartão por robô com a chave de ligar/desligar, o resultado e o que ele está fazendo agora. **Novo robô** abre o assistente:
   1. **Moeda:** as mais negociadas na OKX (com preço e variação do dia) ou qualquer outra pela busca.
-  2. **Valor:** quanto cada compra usa, em USDT, com o seu saldo livre na OKX ao lado (se a chave estiver cadastrada) e quanto a moeda costuma oscilar por dia.
+  2. **Valor:** quanto cada compra usa, em USDT, com o seu saldo livre na OKX ao lado (se a chave estiver cadastrada) e quanto a moeda costuma oscilar por dia. Com a chave **Valor simulado** ligada (padrão), é dinheiro de mentira: o robô opera no mercado real da OKX, com os preços ao vivo, sem usar o seu saldo.
   3. **Volatilidade:** baixa, média ou alta (ver "Volatilidade e ranking" abaixo).
   4. **Robôs:** todos os robôs daquela volatilidade testados na moeda, do melhor ao pior, com quanto o valor escolhido teria virado, a queda máxima, o resultado recente e a comparação com só segurar a moeda. A recomendação da IA vem no topo; um toque em **Usar** cria o robô (simulado ou real) e já liga.
 - **Detalhe do robô:** gráfico de candles com compras e vendas, **o que o robô está esperando** para comprar ou vender, posição aberta, operações, atividade, a **IA do robô** (ajustar sozinha, só sugerir ou nada) e os detalhes técnicos para quem quiser conferir. O lápis edita nome, valor por operação e modo.
@@ -45,7 +45,7 @@ O botão **Sistema ligado/desligado**, no topo, para ou retoma todos os robôs d
 
 ## Modo automático (a IA faz tudo)
 
-Você não escolhe nada: toque em **Ligar no simulado** (ou **Usar dinheiro real**, que pede o valor total, sua senha e o código de 2 etapas). Ao ligar, e depois uma vez por dia:
+Você não escolhe nada além do valor: digite o **valor simulado** e toque em **Ligar no simulado** (ou **Usar dinheiro real**, que pede o valor total, sua senha e o código de 2 etapas). Ao ligar, e depois uma vez por dia:
 
 1. **Testa** todas as estratégias, nas volatilidades baixa e média, nas 8 moedas mais negociadas da OKX (moedas estáveis ficam de fora), no histórico real e com taxas. A volatilidade alta não entra: nos testes, as taxas comeram o lucro de todas as estratégias de minutos.
 2. **Aprova** só robôs com lucro no período todo **e** no período recente, com operações suficientes, já descontando a **taxa real da sua conta** (ver "Taxa da OKX" abaixo). Na ordem, robô com poucas operações pesa menos: +300% em 4 operações numa alta forte pode ter sido sorte.

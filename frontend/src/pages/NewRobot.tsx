@@ -104,7 +104,14 @@ function CoinStep({ onPick }: { onPick: (symbol: string) => void }) {
 
 // ------------------------------------------------------------------ 2. valor
 
-function AmountStep({ symbol, amount, onAmount, onNext }: { symbol: string; amount: number; onAmount: (v: number) => void; onNext: () => void }) {
+function AmountStep({ symbol, amount, onAmount, simulated, onSimulated, onNext }: {
+  symbol: string;
+  amount: number;
+  onAmount: (v: number) => void;
+  simulated: boolean;
+  onSimulated: (v: boolean) => void;
+  onNext: () => void;
+}) {
   const coin = useQuery({ queryKey: ["robot-coin", symbol], queryFn: () => api.get<CoinInfo>(`/robots/coin/${symbol}`), staleTime: 60_000 });
   const c = coin.data;
   const wallet = c?.wallet;
@@ -119,7 +126,15 @@ function AmountStep({ symbol, amount, onAmount, onNext }: { symbol: string; amou
             if (valid) onNext();
           }}
         >
-          <Field label="Valor por operação (USDT)" help="Cada compra do robô usa esse valor. Ele só compra com USDT e só vende o que ele mesmo comprou.">
+          <Switch checked={simulated} onChange={onSimulated} label={<>Valor simulado <span className="text-ink-2">(dinheiro de mentira)</span></>} />
+          <Field
+            label={simulated ? "Valor simulado (USDT)" : "Valor por operação (USDT)"}
+            help={
+              simulated
+                ? "O robô opera no mercado real da OKX, com os preços ao vivo, a taxa da sua conta e slippage, mas com esse valor de mentira: não usa o seu saldo."
+                : "Cada compra do robô usa esse valor. Ele só compra com USDT e só vende o que ele mesmo comprou."
+            }
+          >
             <Input type="number" min={5} step={1} value={Number.isFinite(amount) ? amount : ""} onChange={(e) => onAmount(Number(e.target.value))} required autoFocus />
           </Field>
           <div className="flex flex-wrap gap-2">
@@ -135,7 +150,7 @@ function AmountStep({ symbol, amount, onAmount, onNext }: { symbol: string; amou
             )}
           </div>
           {!valid && <p className="text-xs text-bad-text">O mínimo é 5 USDT.</p>}
-          {wallet?.usdt != null && amount > wallet.usdt && (
+          {!simulated && wallet?.usdt != null && amount > wallet.usdt && (
             <p className="flex gap-1.5 text-xs text-warn-text">
               <AlertTriangle className="size-3.5 shrink-0" /> Na OKX você tem {money(wallet.usdt)} livres: no modo real, o robô só compra se tiver saldo.
             </p>
@@ -286,13 +301,20 @@ function AdviceCard({ advice, loading, robots, onUse }: { advice: Advice | undef
   );
 }
 
-function CreateModal({ robot, symbol, level, amount, onClose }: { robot: RankedRobot | null; symbol: string; level: Level; amount: number; onClose: () => void }) {
+function CreateModal({ robot, symbol, level, amount, initialMode, onClose }: {
+  robot: RankedRobot | null;
+  symbol: string;
+  level: Level;
+  amount: number;
+  initialMode: Mode;
+  onClose: () => void;
+}) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const creds = useQuery({ queryKey: ["credentials"], queryFn: () => api.get<Credentials>("/settings/credentials") });
   const base = symbol.replace(/USDT$/, "");
   const [name, setName] = useState("");
-  const [mode, setMode] = useState<Mode>("paper");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [start, setStart] = useState(true);
   const [ack, setAck] = useState(false);
   const create = useMutation({
@@ -328,7 +350,7 @@ function CreateModal({ robot, symbol, level, amount, onClose }: { robot: RankedR
             />
             <p className="text-xs text-ink-2">
               {mode === "paper"
-                ? "Ordens fictícias com os preços reais da OKX, taxa e slippage. Bom para acompanhar antes de arriscar."
+                ? `Simulação com ${money(amount)} de mentira: ordens fictícias com os preços reais da OKX, a taxa da sua conta e slippage. Bom para acompanhar antes de arriscar.`
                 : `Ordens reais na OKX: cada compra usa ${money(amount)}.`}
             </p>
             {noKeys && (
@@ -355,7 +377,7 @@ function CreateModal({ robot, symbol, level, amount, onClose }: { robot: RankedR
   );
 }
 
-function ResultStep({ symbol, level, amount }: { symbol: string; level: Level; amount: number }) {
+function ResultStep({ symbol, level, amount, mode }: { symbol: string; level: Level; amount: number; mode: Mode }) {
   const qc = useQueryClient();
   const base = symbol.replace(/USDT$/, "");
   const [chosen, setChosen] = useState<RankedRobot | null>(null);
@@ -427,7 +449,7 @@ function ResultStep({ symbol, level, amount }: { symbol: string; level: Level; a
           {pct(rank.data.fee_pct, false, 2)} por ordem (a da sua conta na OKX, se a chave estiver cadastrada). Resultado passado não garante o futuro.
         </p>
       </Card>
-      <CreateModal robot={chosen} symbol={symbol} level={level} amount={amount} onClose={() => setChosen(null)} />
+      <CreateModal robot={chosen} symbol={symbol} level={level} amount={amount} initialMode={mode} onClose={() => setChosen(null)} />
     </div>
   );
 }
@@ -438,6 +460,7 @@ export function NewRobotPage() {
   const [step, setStep] = useState<Step>("coin");
   const [symbol, setSymbol] = useState("");
   const [amount, setAmount] = useState(100);
+  const [simulated, setSimulated] = useState(true);
   const [level, setLevel] = useState<Level | null>(null);
   const done = useMemo(() => ({ coin: Boolean(symbol), amount: Boolean(symbol) && amount >= 5, level: Boolean(level), result: Boolean(level) }), [symbol, amount, level]);
   const base = symbol.replace(/USDT$/, "");
@@ -456,7 +479,7 @@ export function NewRobotPage() {
       {symbol && step !== "coin" && (
         <p className="-mt-2 mb-4 text-sm text-ink-2">
           {base}
-          {step !== "amount" && <> · {money(amount)} por operação</>}
+          {step !== "amount" && <> · {money(amount)} {simulated ? "simulados" : "por operação"}</>}
           {step === "result" && level && <> · volatilidade {level === "media" ? "média" : level}</>}
         </p>
       )}
@@ -468,7 +491,9 @@ export function NewRobotPage() {
           }}
         />
       )}
-      {step === "amount" && symbol && <AmountStep symbol={symbol} amount={amount} onAmount={setAmount} onNext={() => setStep("level")} />}
+      {step === "amount" && symbol && (
+        <AmountStep symbol={symbol} amount={amount} onAmount={setAmount} simulated={simulated} onSimulated={setSimulated} onNext={() => setStep("level")} />
+      )}
       {step === "level" && symbol && (
         <LevelStep
           symbol={symbol}
@@ -478,7 +503,7 @@ export function NewRobotPage() {
           }}
         />
       )}
-      {step === "result" && symbol && level && <ResultStep symbol={symbol} level={level} amount={amount} />}
+      {step === "result" && symbol && level && <ResultStep symbol={symbol} level={level} amount={amount} mode={simulated ? "paper" : "live"} />}
     </>
   );
 }
