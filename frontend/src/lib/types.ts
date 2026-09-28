@@ -547,6 +547,106 @@ export interface Ranking {
   amount: number;
 }
 
+// ------------------------------------------------------------------ modo automático
+
+export interface AutoConfig {
+  enabled: boolean;
+  mode: Mode;
+  budget: number;
+  slots: number;
+  allocation: number;
+  paused_reason: string;
+  live_authorized: boolean;
+  started_at: string | null;
+  last_run_at: string | null;
+  next_run_at: string | null;
+}
+
+export interface AutoLimits {
+  robot_loss_pct: number;
+  total_loss_pct: number;
+  min_per_robot: number;
+  max_robots: number;
+  cycle_hours: number;
+  min_age_days: number;
+  cooldown_days: number;
+  default_paper_budget: number;
+}
+
+export interface AutoAction {
+  type: "create" | "retire" | "keep" | "pause" | "error";
+  bot_id?: number;
+  name?: string;
+  text: string;
+  state?: "retired" | "retiring";
+}
+
+export interface AutoPoolRow {
+  pick: string;
+  symbol: string;
+  name: string;
+  level: Level;
+  interval: string;
+  return_pct: number;
+  recent_return_pct: number;
+  drawdown_pct: number;
+  trades: number;
+  win_rate_pct: number;
+  buy_hold_pct: number;
+  days: number;
+  yearly_score: number;
+}
+
+export interface AutoCycle {
+  id: number;
+  trigger: "start" | "manual" | "schedule";
+  status: "running" | "done" | "failed";
+  summary: string;
+  actions: AutoAction[];
+  ai_model: string;
+  error: string;
+  created_at: string;
+  finished_at: string | null;
+  pool?: AutoPoolRow[];
+}
+
+export interface AutoRobot {
+  bot_id: number;
+  state: "active" | "retiring" | "retired";
+  allocation: number;
+  level: string;
+  reason: string;
+  retire_reason: string;
+  expected: { return_pct: number; recent_return_pct: number; drawdown_pct: number; trades: number; win_rate_pct: number; buy_hold_pct: number; days: number } | null;
+  created_at: string;
+  retired_at: string | null;
+  pnl_pct: number | null;
+  bot: Pick<Bot, "id" | "name" | "symbol" | "interval" | "strategy" | "strategy_name" | "mode" | "status" | "status_reason" | "position" | "stats" | "last_tick_at">;
+}
+
+export interface AutoOverview {
+  config: AutoConfig;
+  limits: AutoLimits;
+  running: boolean;
+  performance: {
+    total_pnl: number;
+    realized_pnl: number;
+    unrealized_pnl: number;
+    total_pct: number | null;
+    today_pnl: number;
+    trades: number;
+    wins: number;
+    win_rate: number | null;
+    invested: number;
+    active_robots: number;
+  };
+  equity_curve: { time: string; pnl: number; live?: boolean }[];
+  robots: AutoRobot[];
+  cycles: AutoCycle[];
+  ai_configured: boolean;
+  ai_label: string | null;
+}
+
 export interface Advice {
   recommended_key: string;
   headline: string;

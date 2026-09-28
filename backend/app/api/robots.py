@@ -22,10 +22,6 @@ from app.services.stats import bot_summary
 
 router = APIRouter(prefix="/robots", tags=["robots"])
 
-STABLES = {
-    "USDT", "USDC", "USDG", "DAI", "TUSD", "FDUSD", "USDE", "PYUSD", "USD1", "RLUSD", "USDD", "USDP", "GUSD", "BUSD",
-    "FRAX", "LUSD", "USDS", "AUSD", "EURC", "EURT", "EUR", "BRL",
-}  # fmt: skip
 COIN_NAMES = {
     "BTC": "Bitcoin", "ETH": "Ethereum", "SOL": "Solana", "XRP": "XRP", "DOGE": "Dogecoin", "ADA": "Cardano",
     "AVAX": "Avalanche", "LINK": "Chainlink", "LTC": "Litecoin", "TRX": "Tron", "DOT": "Polkadot", "TON": "Toncoin",
@@ -40,11 +36,6 @@ COIN_NAMES = {
 }  # fmt: skip
 
 
-def _looks_stable(base: str, t: dict) -> bool:
-    """Moeda estável: pela lista ou pelo jeito (cotada perto de 1 dólar e parada). Não serve para robô."""
-    return base in STABLES or (0.98 <= t["price"] <= 1.02 and abs(t["change_pct"]) < 0.3)
-
-
 @router.get("/levels")
 def levels(_: User = Depends(get_current_user)):
     return [{k: v for k, v in level.items()} for level in ranking.LEVELS.values()]
@@ -57,8 +48,6 @@ def coins(_: User = Depends(get_current_user)):
         tickers = get_market().tickers()
     except Exception as exc:
         raise HTTPException(502, f"OKX indisponível: {exc}") from exc
-    items = [(s, t) for s, t in tickers.items() if s.endswith("USDT") and t["price"] > 0 and not _looks_stable(s[:-4], t)]
-    items.sort(key=lambda x: -x[1]["quote_volume"])
     return [
         {
             "symbol": s,
@@ -68,7 +57,7 @@ def coins(_: User = Depends(get_current_user)):
             "change_24h_pct": round(t["change_pct"], 2),
             "volume_usdt": round(t["quote_volume"]),
         }
-        for s, t in items[:24]
+        for s, t in ranking.liquid_coins(tickers, 24)
     ]
 
 

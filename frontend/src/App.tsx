@@ -3,6 +3,7 @@ import { Layout } from "./components/Layout";
 import { RouteError } from "./components/RouteError";
 import { Loading } from "./components/ui";
 import { useAuth } from "./lib/auth";
+import { AutoPage } from "./pages/Auto";
 import { BotDetailPage } from "./pages/BotDetail";
 import { DashboardPage } from "./pages/Dashboard";
 import { LoginPage } from "./pages/Login";
@@ -20,6 +21,7 @@ const router = createBrowserRouter([
         errorElement: <RouteError />,
         children: [
           { path: "/", element: <DashboardPage /> },
+          { path: "/auto", element: <AutoPage /> },
           { path: "/bots", element: <RobotsPage /> },
           { path: "/bots/new", element: <NewRobotPage /> },
           { path: "/bots/:id", element: <BotDetailPage /> },

@@ -71,6 +71,11 @@ INTERVAL_SHORT = {"5m": "5min", "15m": "15min", "1h": "1h", "2h": "2h", "4h": "4
 MIN_TRADES = 4
 CACHE_TTL = 1800
 
+STABLES = {
+    "USDT", "USDC", "USDG", "DAI", "TUSD", "FDUSD", "USDE", "PYUSD", "USD1", "RLUSD", "USDD", "USDP", "GUSD", "BUSD",
+    "FRAX", "LUSD", "USDS", "AUSD", "EURC", "EURT", "EUR", "BRL",
+}  # fmt: skip
+
 _cache: dict[tuple[str, str], tuple[float, dict]] = {}
 _cache_lock = threading.Lock()
 _run_lock = threading.Lock()  # um ranking por vez: é pesado para a CPU
@@ -105,6 +110,18 @@ def catalog(level: str) -> list[dict]:
 
 def find_robot(level: str, key: str) -> dict | None:
     return next((r for r in catalog(level) if r["key"] == key), None)
+
+
+def looks_stable(base: str, t: dict) -> bool:
+    """Moeda estável: pela lista ou pelo jeito (cotada perto de 1 dólar e parada). Não serve para robô."""
+    return base in STABLES or (0.98 <= t["price"] <= 1.02 and abs(t["change_pct"]) < 0.3)
+
+
+def liquid_coins(tickers: dict[str, dict], n: int) -> list[tuple[str, dict]]:
+    """As moedas mais negociadas contra USDT, sem as estáveis, por volume em 24 h."""
+    items = [(s, t) for s, t in tickers.items() if s.endswith("USDT") and t["price"] > 0 and not looks_stable(s[:-4], t)]
+    items.sort(key=lambda x: -x[1]["quote_volume"])
+    return items[:n]
 
 
 # ---------------------------------------------------------------------------

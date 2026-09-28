@@ -1,6 +1,6 @@
 # Bot Trader
 
-Sistema pessoal de trading automatizado na **OKX** (Spot), com painel web de **3 abas** (Painel, Robôs e Configurações). Para criar um robô você só responde três perguntas: **qual moeda**, **quanto usar** e **qual volatilidade**. O sistema testa todos os robôs no histórico real da moeda, mostra do melhor ao pior, e a IA (**Claude ou GPT**, você escolhe) recomenda o que faz mais sentido. Depois, a IA de cada robô continua testando e aplicando melhorias sozinha, e as notícias e o sentimento do mercado travam compras em momentos ruins. Login com verificação em duas etapas e chaves criptografadas.
+Sistema pessoal de trading automatizado na **OKX** (Spot), com painel web de **4 abas** (Painel, Automático, Robôs e Configurações). No **modo automático** você só liga: a IA escolhe as moedas e as estratégias, testa no histórico, liga os robôs, acompanha se está ganhando ou perdendo e troca quem vai mal. Se preferir escolher, para criar um robô você só responde três perguntas: **qual moeda**, **quanto usar** e **qual volatilidade**. O sistema testa todos os robôs no histórico real da moeda, mostra do melhor ao pior, e a IA (**Claude ou GPT**, você escolhe) recomenda o que faz mais sentido. Depois, a IA de cada robô continua testando e aplicando melhorias sozinha, e as notícias e o sentimento do mercado travam compras em momentos ruins. Login com verificação em duas etapas e chaves criptografadas.
 
 > Uso por sua conta e risco. Nenhuma estratégia garante lucro. Comece sempre em modo **simulado**.
 
@@ -25,13 +25,15 @@ Se o PowerShell bloquear: `powershell -ExecutionPolicy Bypass -File .\start.ps1`
 
 1. **Crie sua conta.** O primeiro cadastro vira o dono do sistema; depois disso o cadastro fecha.
 2. **Configurações:** ative a **verificação em duas etapas** e cadastre a chave de API da **OKX** (veja "Chave da OKX" abaixo) e, se quiser a IA, a chave do Claude/Anthropic ou do GPT/OpenAI. Tudo fica criptografado no banco e nunca volta para a tela; chaves da OKX com permissão de saque são recusadas.
-3. **Robôs → Novo robô:** escolha a moeda, o valor por operação e a volatilidade. Em alguns segundos aparece o ranking dos robôs testados e a recomendação. Toque em **Usar** e deixe em **Simulado**: ele usa preços reais, com taxa e slippage, sem gastar dinheiro.
-4. Acompanhe pelo **Painel**. Quando estiver confiante, abra o robô, toque no lápis e troque para **Dinheiro real**.
+3. **Automático → Ligar no simulado.** Pronto: a IA faz o resto (ver "Modo automático" abaixo). Ela usa preços reais, com taxa e slippage, sem gastar dinheiro. Quando estiver confiante, toque em **Usar dinheiro real**.
+4. Ou, se quiser escolher você mesmo: **Robôs → Novo robô**, escolha a moeda, o valor por operação e a volatilidade, e toque em **Usar** no robô do ranking.
+5. Acompanhe pelo **Painel**.
 
 O botão **Sistema ligado/desligado**, no topo, para ou retoma todos os robôs de uma vez. Desligar não vende as posições.
 
 ## O que tem em cada tela
 
+- **Automático:** um botão para ligar. Depois mostra o resultado da IA (total, em % do valor, hoje, realizado e em aberto), os robôs que ela opera com o motivo de cada escolha e o que o teste prometia, e o histórico do que ela fez em cada dia.
 - **Painel:** resultado total (realizado + em aberto), hoje, taxa de acerto, curva de resultado acumulado, resultado por dia, robôs, resultado por estratégia, carteira da OKX, humor do mercado com as notícias fortes do momento, últimas operações e atividade. Separa **Real** de **Simulado**.
 - **Robôs:** um cartão por robô com a chave de ligar/desligar, o resultado e o que ele está fazendo agora. **Novo robô** abre o assistente:
   1. **Moeda:** as mais negociadas na OKX (com preço e variação do dia) ou qualquer outra pela busca.
@@ -40,6 +42,23 @@ O botão **Sistema ligado/desligado**, no topo, para ou retoma todos os robôs d
   4. **Robôs:** todos os robôs daquela volatilidade testados na moeda, do melhor ao pior, com quanto o valor escolhido teria virado, a queda máxima, o resultado recente e a comparação com só segurar a moeda. A recomendação da IA vem no topo; um toque em **Usar** cria o robô (simulado ou real) e já liga.
 - **Detalhe do robô:** gráfico de candles com compras e vendas, **o que o robô está esperando** para comprar ou vender, posição aberta, operações, atividade, a **IA do robô** (ajustar sozinha, só sugerir ou nada) e os detalhes técnicos para quem quiser conferir. O lápis edita nome, valor por operação e modo.
 - **Configurações:** chave da OKX (com conferência das permissões na própria OKX e o IP do servidor para vincular), qual IA usar (Claude ou GPT, e o modelo do GPT), verificação em duas etapas, sessões abertas e atividade recente da conta.
+
+## Modo automático (a IA faz tudo)
+
+Você não escolhe nada: toque em **Ligar no simulado** (ou **Usar dinheiro real**, que pede o valor total, sua senha e o código de 2 etapas). Ao ligar, e depois uma vez por dia:
+
+1. **Testa** todas as estratégias, nas volatilidades baixa e média, nas 8 moedas mais negociadas da OKX (moedas estáveis ficam de fora), no histórico real e com taxas. A volatilidade alta não entra: nos testes, as taxas comeram o lucro de todas as estratégias de minutos.
+2. **Aprova** só robôs com lucro no período todo **e** no período recente, com operações suficientes.
+3. **Acompanha** os robôs que ela opera: encerra quem perdeu 10% do valor que recebeu (conferido a cada minuto) ou quem deixou de passar nos testes (só depois de 3 dias, porque cada troca custa taxas). Robô encerrado por ir mal não volta pelos 14 dias seguintes.
+4. **Escolhe**: a IA (Claude ou GPT) escolhe entre os aprovados, no máximo um robô por moeda, e pode deixar o dinheiro parado em USDT se o mercado estiver ruim. Ela nunca escolhe um robô reprovado. Sem chave de IA, vale a ordem do ranking.
+5. **Liga** os robôs, dividindo o valor total em até 3 partes iguais (pelo menos 5 USDT cada: com 9 USDT, por exemplo, vai tudo num robô só). A IA de cada robô continua ajustando stop, trailing e parâmetros.
+
+Proteções:
+
+- Robô encerrado que ainda tem uma compra aberta não compra de novo: ele vende pela regra normal (sinal, stop ou alvo) e então para. O modo automático nunca vende na hora nem tira o stop.
+- Se o resultado total desde que foi ligado chegar a **−20%** do valor, todos os robôs são encerrados e nada novo é criado até você tocar em **Retomar**.
+- Desligar funciona do mesmo jeito: os robôs param de comprar e fecham as posições pela regra normal.
+- Com dinheiro real, o valor não pode passar do seu saldo livre de USDT na OKX.
 
 ## IA: Claude ou GPT
 
@@ -140,6 +159,7 @@ O que isso significa:
 1. Na OKX (Perfil → **API** → Criar chave de API V5), dê um nome, crie uma **passphrase** (guarde: a OKX pede junto com a chave) e marque só **Leitura** e **Negociação**. **Nunca** marque Saque.
 2. Em "Endereço IP", vincule o IP do servidor, que aparece no cartão da OKX em Configurações. Sem IP vinculado a chave funciona, mas a OKX pode apagar chaves de negociação que ficam muitos dias sem uso.
 3. Deixe a conta no modo **Spot** (a OKX chama de modo de conta "Spot"): o sistema opera sem margem.
+   Os robôs compram com **USDT**: compre USDT com seus reais (PIX ou P2P) e **transfira da conta de financiamento (Funding) para a conta de negociação (Trading)**. O sistema só enxerga o saldo da conta de negociação. Não precisa comprar a moeda antes.
 4. No Bot Trader, em Configurações → **OKX**, cole a API key, a Secret key e a passphrase, escolha a região (Brasil = Global) e confirme com sua senha. O sistema confere tudo na OKX antes de salvar.
 5. Para testar sem dinheiro, crie chaves no **Demo Trading** da OKX e marque "Chaves do Demo Trading".
 

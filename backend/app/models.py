@@ -318,3 +318,63 @@ class KVSetting(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[dict | list | str | int | float | None] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow, onupdate=utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Modo automático (v2.6). Também são tabelas novas.
+
+
+class AutoTrader(Base):
+    """Modo automático de um usuário: a IA escolhe moedas e robôs, divide o valor e troca quem vai mal."""
+
+    __tablename__ = "auto_trader"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    mode: Mapped[str] = mapped_column(String(8), default="paper")  # paper | live
+    budget: Mapped[float] = mapped_column(Float, default=1000.0)  # USDT que a IA pode usar no total
+    max_robots: Mapped[int] = mapped_column(Integer, default=3)
+    live_authorized_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+    paused_reason: Mapped[str] = mapped_column(String(300), default="")  # proteção contra perdas
+    started_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)  # a proteção conta daqui
+    last_run_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow, onupdate=utcnow)
+
+
+class AutoRobot(Base):
+    """Robô criado pelo modo automático e o que a IA esperava dele."""
+
+    __tablename__ = "auto_robots"
+
+    bot_id: Mapped[int] = mapped_column(ForeignKey("bots.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # active | retiring (não compra mais; para ao vender a posição) | retired
+    state: Mapped[str] = mapped_column(String(12), default="active", index=True)
+    allocation: Mapped[float] = mapped_column(Float)
+    level: Mapped[str] = mapped_column(String(8), default="")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    expected: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # resultado no teste quando foi escolhido
+    retire_reason: Mapped[str] = mapped_column(String(300), default="")
+    # encerrado por ir mal: a mesma moeda + estratégia não volta antes disso
+    cooldown_until: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow)
+    retired_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+
+
+class AutoCycle(Base):
+    """Um ciclo do modo automático: o que foi testado, o que a IA decidiu e o que mudou."""
+
+    __tablename__ = "auto_cycles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    trigger: Mapped[str] = mapped_column(String(16), default="schedule")  # start | manual | schedule
+    status: Mapped[str] = mapped_column(String(12), default="running", index=True)  # running | done | failed
+    summary: Mapped[str] = mapped_column(Text, default="")
+    actions: Mapped[list] = mapped_column(JSON, default=list)
+    pool: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    ai_model: Mapped[str] = mapped_column(String(64), default="")
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)

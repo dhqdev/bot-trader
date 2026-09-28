@@ -28,7 +28,7 @@ from app.core.risk import PositionState, RiskConfig, open_position, position_siz
 from app.core.sentiment import live_check as sentiment_check
 from app.core.strategies import REMOVED, get_strategy
 from app.db import session_scope
-from app.models import Bot, BotEvent, Credential, Order, Position, SystemState, utcnow
+from app.models import AutoRobot, Bot, BotEvent, Credential, Order, Position, SystemState, utcnow
 from app.security import decrypt
 
 log = logging.getLogger("bot_trader.engine")
@@ -259,6 +259,9 @@ class BotService:
         self.sell(pos, 1.0, "news")
 
     def can_enter(self) -> tuple[bool, str]:
+        managed = self.db.get(AutoRobot, self.bot.id)
+        if managed is not None and managed.state != "active":
+            return False, "o modo automático está encerrando este robô (só vende a posição aberta, não compra de novo)"
         last = self.db.scalar(
             select(Position)
             .where(Position.bot_id == self.bot.id, Position.status == "closed")
