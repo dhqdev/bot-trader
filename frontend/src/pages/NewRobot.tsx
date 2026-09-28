@@ -423,7 +423,8 @@ function ResultStep({ symbol, level, amount }: { symbol: string; level: Level; a
           ))}
         </ul>
         <p className="mt-3 text-xs text-muted">
-          Ranking: resultado no período todo e no período recente, descontando metade da maior queda. Já inclui taxa e slippage. Resultado passado não garante o futuro.
+          Ranking: resultado no período todo e no período recente, descontando metade da maior queda. Já inclui slippage e a taxa de{" "}
+          {pct(rank.data.fee_pct, false, 2)} por ordem (a da sua conta na OKX, se a chave estiver cadastrada). Resultado passado não garante o futuro.
         </p>
       </Card>
       <CreateModal robot={chosen} symbol={symbol} level={level} amount={amount} onClose={() => setChosen(null)} />

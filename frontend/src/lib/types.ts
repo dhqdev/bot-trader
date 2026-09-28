@@ -543,6 +543,7 @@ export interface Ranking {
   best: string;
   worst: string;
   coin: CoinProfile;
+  fee_pct: number;
   tested_at: string;
   amount: number;
 }
@@ -617,7 +618,16 @@ export interface AutoRobot {
   level: string;
   reason: string;
   retire_reason: string;
-  expected: { return_pct: number; recent_return_pct: number; drawdown_pct: number; trades: number; win_rate_pct: number; buy_hold_pct: number; days: number } | null;
+  expected: {
+    return_pct: number;
+    recent_return_pct: number;
+    drawdown_pct: number;
+    trades: number;
+    win_rate_pct: number;
+    buy_hold_pct: number;
+    days: number;
+    fee_pct?: number;
+  } | null;
   created_at: string;
   retired_at: string | null;
   pnl_pct: number | null;

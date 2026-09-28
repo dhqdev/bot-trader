@@ -14,7 +14,7 @@ export function useAuto() {
   return useQuery({
     queryKey: ["auto"],
     queryFn: () => api.get<AutoOverview>("/auto"),
-    refetchInterval: (q) => (q.state.data?.running ? 4000 : 15_000),
+    refetchInterval: (q) => (q.state.data?.running ? 4000 : 10_000),
   });
 }
 
@@ -135,7 +135,8 @@ function RobotRow({ r }: { r: AutoRobot }) {
       {r.expected && (
         <p className="text-xs text-muted">
           No teste: {pct(r.expected.return_pct, true, 1)} em {r.expected.days} dias, {pct(r.expected.recent_return_pct, true, 1)} no período recente, queda máxima de{" "}
-          {pct(r.expected.drawdown_pct, true, 1)}.
+          {pct(r.expected.drawdown_pct, true, 1)}
+          {r.expected.fee_pct != null ? `, já com a taxa de ${pct(r.expected.fee_pct, false, 2)} por ordem` : ""}.
         </p>
       )}
       {r.state !== "active" && r.retire_reason && (

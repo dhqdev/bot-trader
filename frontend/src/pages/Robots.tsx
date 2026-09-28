@@ -86,7 +86,7 @@ function RobotCard({ bot }: { bot: Bot }) {
 
 export function RobotsPage() {
   const navigate = useNavigate();
-  const { data, isLoading, error } = useQuery({ queryKey: ["bots"], queryFn: () => api.get<Bot[]>("/bots"), refetchInterval: 15_000 });
+  const { data, isLoading, error } = useQuery({ queryKey: ["bots"], queryFn: () => api.get<Bot[]>("/bots"), refetchInterval: 10_000 });
   return (
     <>
       <PageHeader

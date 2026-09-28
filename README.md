@@ -48,7 +48,7 @@ O botão **Sistema ligado/desligado**, no topo, para ou retoma todos os robôs d
 Você não escolhe nada: toque em **Ligar no simulado** (ou **Usar dinheiro real**, que pede o valor total, sua senha e o código de 2 etapas). Ao ligar, e depois uma vez por dia:
 
 1. **Testa** todas as estratégias, nas volatilidades baixa e média, nas 8 moedas mais negociadas da OKX (moedas estáveis ficam de fora), no histórico real e com taxas. A volatilidade alta não entra: nos testes, as taxas comeram o lucro de todas as estratégias de minutos.
-2. **Aprova** só robôs com lucro no período todo **e** no período recente, com operações suficientes.
+2. **Aprova** só robôs com lucro no período todo **e** no período recente, com operações suficientes, já descontando a **taxa real da sua conta** (ver "Taxa da OKX" abaixo). Na ordem, robô com poucas operações pesa menos: +300% em 4 operações numa alta forte pode ter sido sorte.
 3. **Acompanha** os robôs que ela opera: encerra quem perdeu 10% do valor que recebeu (conferido a cada minuto) ou quem deixou de passar nos testes (só depois de 3 dias, porque cada troca custa taxas). Robô encerrado por ir mal não volta pelos 14 dias seguintes.
 4. **Escolhe**: a IA (Claude ou GPT) escolhe entre os aprovados, no máximo um robô por moeda, e pode deixar o dinheiro parado em USDT se o mercado estiver ruim. Ela nunca escolhe um robô reprovado. Sem chave de IA, vale a ordem do ranking.
 5. **Liga** os robôs, dividindo o valor total em até 3 partes iguais (pelo menos 5 USDT cada: com 9 USDT, por exemplo, vai tudo num robô só). A IA de cada robô continua ajustando stop, trailing e parâmetros.
@@ -162,6 +162,10 @@ O que isso significa:
    Os robôs compram com **USDT**: compre USDT com seus reais (PIX ou P2P) e **transfira da conta de financiamento (Funding) para a conta de negociação (Trading)**. O sistema só enxerga o saldo da conta de negociação. Não precisa comprar a moeda antes.
 4. No Bot Trader, em Configurações → **OKX**, cole a API key, a Secret key e a passphrase, escolha a região (Brasil = Global) e confirme com sua senha. O sistema confere tudo na OKX antes de salvar.
 5. Para testar sem dinheiro, crie chaves no **Demo Trading** da OKX e marque "Chaves do Demo Trading".
+
+### Taxa da OKX
+
+A taxa muda por conta, nível e região. Contas do Brasil no nível **Lv1**, por exemplo, pagam **0,1%** em ordens limitadas e **0,4%** em ordens a mercado, que são as que os robôs usam. Uma compra e venda custa ~0,85%. Com a chave cadastrada, o sistema lê a taxa da sua conta na própria OKX e usa essa taxa nos testes do ranking, na escolha do modo automático e no simulado. Sem chave, usa 0,1%. A pesquisa abaixo foi feita com 0,1%: com a taxa real, menos robôs passam (num teste de set/2026, 55 de 217 contra 89 com 0,1%).
 
 Tudo usa a OKX: preços ao vivo, ordens, saldo, a lista de pares e o histórico dos testes do ranking e da IA do robô. O histórico baixado fica guardado no banco, então só a primeira consulta de cada par demora alguns segundos. Os robôs criados antes da mudança (quando o sistema usava a Binance) foram migrados sozinhos: os simulados seguem rodando com preços da OKX; os reais foram desligados para você conferir as chaves e religar.
 

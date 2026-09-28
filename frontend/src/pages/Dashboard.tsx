@@ -121,7 +121,7 @@ export function DashboardPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["dashboard", mode],
     queryFn: () => api.get<Dashboard>(`/dashboard?mode=${mode}`),
-    refetchInterval: 15_000,
+    refetchInterval: 10_000,
   });
 
   const header = (

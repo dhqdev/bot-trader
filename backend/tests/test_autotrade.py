@@ -15,7 +15,7 @@ from app.core.exchange import SymbolRules
 from app.db import session_scope
 from app.main import app
 from app.models import AutopilotConfig, AutoCycle, AutoRobot, AutoTrader, Bot, Position, User, utcnow
-from app.services import autotrade, ranking
+from app.services import autotrade, fees, ranking
 from app.services.llm import AIConfig
 
 from .conftest import FakeMarket
@@ -58,10 +58,16 @@ TABLE = {
 
 
 @pytest.fixture
-def table(monkeypatch):
+def rank_calls():
+    return []
+
+
+@pytest.fixture
+def table(monkeypatch, rank_calls):
     data = {k: [dict(r) for r in v] for k, v in TABLE.items()}
 
-    def rank(symbol, level, force=False):
+    def rank(symbol, level, force=False, fee_pct=None):
+        rank_calls.append((symbol, level, fee_pct))
         if (symbol, level) not in data:
             raise ValueError(f"Sem histórico suficiente de {symbol}.")
         return {"symbol": symbol, "level": level, "days": ranking.LEVELS[level]["days"], "robots": data[(symbol, level)]}
@@ -81,6 +87,7 @@ def offline(monkeypatch, table):
     monkeypatch.setattr(auto_api, "resolve_ai", lambda user_id: None)
     monkeypatch.setattr(autotrade, "_ai_for", lambda user_id: None)
     monkeypatch.setattr(autotrade, "launch", lambda cycle_id, ai: autotrade.execute(cycle_id, ai))
+    monkeypatch.setattr(fees, "account_fee_pct", lambda user_id, symbol: None)  # sem chave da OKX: taxa padrão
     yield market
 
 
@@ -157,6 +164,23 @@ def test_small_budgets_use_fewer_robots():
     assert split(9.0) == (1, 9.0)  # ~50 reais: um robô só, com tudo
     assert split(10.0) == (2, 5.0)
     assert split(1000.0) == (3, 333.33)
+
+
+def test_tests_and_robots_use_the_real_account_fee(api, monkeypatch, rank_calls):
+    monkeypatch.setattr(fees, "account_fee_pct", lambda user_id, symbol: 0.4)  # conta do Brasil no nível Lv1
+    cycle = api.post("/api/auto/start", json={}).json()["cycles"][0]
+    assert rank_calls and {fee for _, _, fee in rank_calls} == {0.4}
+    assert "taxa real da sua conta na OKX: 0,40% por ordem" in cycle["summary"]
+    robots = _robots("active")
+    assert robots and all(bot.risk["fee_pct"] == 0.4 and ar.expected["fee_pct"] == 0.4 for ar, bot in robots)
+
+
+def test_few_trades_weigh_less_than_a_consistent_record(table):
+    # +60% com 4 operações (pode ter sido sorte) contra +30% com 40 operações
+    table[("BTCUSDT", "baixa")] = [row("squeeze:4h", 60, 20, trades=4), row("confluence:1d", 30, 10, trades=40)]
+    rows, _ = autotrade.scan(["BTCUSDT"])
+    assert [r["key"] for r in rows] == ["confluence:1d", "squeeze:4h", "ignition:1h"]
+    assert autotrade.confidence(10) == 0.5 and autotrade.confidence(0) == 0.0
 
 
 def test_robot_losing_too_much_is_replaced_by_another(api):

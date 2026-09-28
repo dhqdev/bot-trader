@@ -67,6 +67,8 @@ class FakeOkx:
             return ok(rows[:limit])
         if path == "/api/v5/account/config":
             return ok([{"acctLv": "1", "perm": "read_only,trade", "ip": "203.0.113.7"}])
+        if path == "/api/v5/account/trade-fee":  # conta do Brasil no nível Lv1
+            return ok([{"instType": "SPOT", "level": "Lv1", "maker": "-0.001", "taker": "-0.004"}])
         if path == "/api/v5/account/balance":
             if not self.expired_once:
                 self.expired_once = True
@@ -211,6 +213,13 @@ def test_account_permissions_and_balances(fake):
     bal = trader.balances()  # 1ª consulta volta com relógio fora e é repetida
     assert bal["USDT"] == (250.5, 0.0) and bal["SOL"] == (2.0, 0.5)  # sem availBal: saldo - congelado
     assert okx._perm_list("read_only, Trade,WITHDRAW") == ["read_only", "trade", "withdraw"]
+
+
+def test_taker_fee_is_read_from_the_account(fake):
+    trader = trader_for(fake)
+    assert trader.taker_fee_pct("SOLUSDT") == 0.4  # a OKX devolve -0.004: taxa cobrada de 0,4%
+    req = fake.requests[-1]
+    assert req.url.path == "/api/v5/account/trade-fee" and dict(req.url.params) == {"instType": "SPOT", "instId": "SOL-USDT"}
 
 
 # ---------------------------------------------------------------------------

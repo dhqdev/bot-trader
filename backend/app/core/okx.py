@@ -400,6 +400,14 @@ class OkxTrader:
     def free(self, asset: str) -> float:
         return self.balances().get(asset, (0.0, 0.0))[0]
 
+    def taker_fee_pct(self, symbol: str) -> float:
+        """Taxa (em %) que esta conta paga numa ordem a mercado no par. Varia por conta, nível e região:
+        contas do Brasil no nível Lv1, por exemplo, pagam 0,4%. A OKX devolve a taxa cobrada como
+        número negativo (positivo seria desconto)."""
+        data = self.client.private("GET", "/api/v5/account/trade-fee", {"instType": "SPOT", "instId": self.market.inst_id(symbol)})
+        rate = _num(data[0].get("taker")) if data else 0.0
+        return round(-rate * 100, 4) if rate < 0 else 0.0
+
     def account_summary(self) -> dict:
         cfg = self.config()
         perms = _perm_list(cfg.get("perm"))

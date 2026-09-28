@@ -19,9 +19,9 @@ log = logging.getLogger("bot_trader.stats")
 
 
 class PriceCache:
-    """Evita consultar a Binance a cada requisição do painel."""
+    """Evita consultar a OKX a cada requisição do painel (uma consulta traz todos os pares em ~0,4 s)."""
 
-    def __init__(self, ttl: float = 10.0):
+    def __init__(self, ttl: float = 5.0):
         self.ttl = ttl
         self._data: dict[tuple, tuple[float, dict[str, float]]] = {}
         self._lock = threading.Lock()

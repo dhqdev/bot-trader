@@ -11,7 +11,7 @@ from app.api import robots as robots_api
 from app.core.engine import manager
 from app.core.exchange import SymbolRules
 from app.main import app
-from app.services import backtesting, ranking
+from app.services import backtesting, fees, ranking
 from app.services.llm import AIConfig
 
 from .conftest import FakeMarket, make_ohlcv
@@ -79,6 +79,16 @@ def test_rank_orders_best_to_worst_and_projects_amount():
     first = view["robots"][0]
     assert first["final_usdt"] == pytest.approx(200 * (1 + first["return_pct"] / 100), abs=0.01)
     assert ranking.rank("SOLUSDT", "baixa") is result  # cache
+
+
+def test_rank_discounts_the_account_fee():
+    cheap = ranking.rank("SOLUSDT", "baixa")
+    real = ranking.rank("SOLUSDT", "baixa", fee_pct=0.4)  # conta do Brasil no nível Lv1
+    assert cheap["fee_pct"] == 0.1 and real["fee_pct"] == 0.4 and real is not cheap  # cache separado por taxa
+    before = {r["key"]: r for r in cheap["robots"]}
+    traded = [r for r in real["robots"] if r["trades"] > 0]
+    # mesmas operações (a taxa não muda os sinais), cada uma rendendo menos
+    assert traded and all(r["trades"] == before[r["key"]]["trades"] and r["return_pct"] < before[r["key"]]["return_pct"] for r in traded)
 
 
 def _row(key: str, score: float, eligible: bool) -> dict:
@@ -168,3 +178,12 @@ def test_rank_advice_and_create_with_one_click(api):
     r = api.post("/api/robots/create", json={**body, "robot_key": ranked["best"], "mode": "live"})
     assert r.status_code == 400 and "OKX" in r.json()["detail"]
     assert api.post("/api/robots/rank", json={**body, "amount": 1}).status_code == 422  # valor mínimo
+
+
+def test_ranking_and_new_robot_use_the_account_fee(api, monkeypatch):
+    monkeypatch.setattr(fees, "account_fee_pct", lambda user_id, symbol: 0.4)
+    body = {"symbol": "SOLUSDT", "level": "baixa", "amount": 50}
+    ranked = api.post("/api/robots/rank", json=body).json()
+    assert ranked["fee_pct"] == 0.4
+    bot = api.post("/api/robots/create", json={**body, "robot_key": ranked["best"], "mode": "paper", "start": False}).json()
+    assert bot["risk"]["fee_pct"] == 0.4  # o simulado cobra o mesmo que a OKX cobraria

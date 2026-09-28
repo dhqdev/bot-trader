@@ -76,7 +76,7 @@ STABLES = {
     "FRAX", "LUSD", "USDS", "AUSD", "EURC", "EURT", "EUR", "BRL",
 }  # fmt: skip
 
-_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+_cache: dict[tuple[str, str, float | None], tuple[float, dict]] = {}
 _cache_lock = threading.Lock()
 _run_lock = threading.Lock()  # um ranking por vez: é pesado para a CPU
 
@@ -152,7 +152,7 @@ def coin_profile(symbol: str) -> dict:
     }
 
 
-def _test_interval(symbol: str, interval: str, days: int, robots: list[dict]) -> tuple[list[dict], dict | None]:
+def _test_interval(symbol: str, interval: str, days: int, robots: list[dict], fee_pct: float | None = None) -> tuple[list[dict], dict | None]:
     warm = max(max(STRATEGIES[r["strategy"]].warmup(r["params"]) // 2, 30) for r in robots)
     df = backtesting.history(symbol, interval, backtesting.bars_for(interval, days, warm))
     if len(df) < warm + 100:
@@ -165,8 +165,9 @@ def _test_interval(symbol: str, interval: str, days: int, robots: list[dict]) ->
         sent = None
     minutes = INTERVAL_MINUTES[interval]
     rows = []
+    fee = {} if fee_pct is None else {"fee_pct": fee_pct}
     for r in robots:
-        risk = RiskConfig(**{**r["risk"], "sizing_mode": "percent_balance", "balance_percent": 100})
+        risk = RiskConfig(**{**r["risk"], "sizing_mode": "percent_balance", "balance_percent": 100, **fee})
         full = run_backtest(df, r["strategy"], r["params"], risk, interval, 1000.0, max_curve_points=80, sentiment=sent, start_index=start)
         recent = run_backtest(df, r["strategy"], r["params"], risk, interval, 1000.0, max_curve_points=2, sentiment=sent, start_index=split)
         m, mr = full["metrics"], recent["metrics"]
@@ -199,9 +200,11 @@ def best_and_worst(rows: list[dict]) -> tuple[dict, dict]:
     return best, min(others, key=lambda r: r["score"])
 
 
-def rank(symbol: str, level: str, force: bool = False) -> dict:
-    """Testa todos os robôs do nível na moeda e ordena do melhor ao pior (com cache de 30 min)."""
-    key = (symbol, level)
+def rank(symbol: str, level: str, force: bool = False, fee_pct: float | None = None) -> dict:
+    """Testa todos os robôs do nível na moeda e ordena do melhor ao pior (com cache de 30 min).
+
+    fee_pct: taxa por ordem da conta na OKX (services/fees.py); None usa a taxa padrão."""
+    key = (symbol, level, fee_pct)
     with _cache_lock:
         hit = _cache.get(key)
     if hit and not force and time.time() - hit[0] < CACHE_TTL:
@@ -214,7 +217,7 @@ def rank(symbol: str, level: str, force: bool = False) -> dict:
         for interval in info["intervals"]:
             group = [r for r in robots if r["interval"] == interval]
             try:
-                got, period = _test_interval(symbol, interval, info["days"], group)
+                got, period = _test_interval(symbol, interval, info["days"], group, fee_pct)
             except ValueError as exc:  # par sem histórico nesse tempo de candle
                 log.info("Ranking de %s %s: %s", symbol, interval, exc)
                 continue
@@ -241,6 +244,7 @@ def rank(symbol: str, level: str, force: bool = False) -> dict:
         "best": best["key"],
         "worst": worst["key"],
         "coin": coin_profile(symbol),
+        "fee_pct": RiskConfig().fee_pct if fee_pct is None else fee_pct,
         "tested_at": utcnow().isoformat(),
     }
     with _cache_lock:
@@ -345,6 +349,7 @@ def advise(result: dict, amount: float, ai: AIConfig | None, client=None) -> dic
         "valor_para_investir_usdt": amount,
         "volatilidade_escolhida": result["level_label"],
         "dias_testados": result["days"],
+        "taxa_por_ordem_pct_ja_descontada": result.get("fee_pct"),
         "moeda_perfil": result.get("coin"),
         "so_segurar_a_moeda_pct": result["robots"][0]["buy_hold_pct"] if result["robots"] else None,
         "ranking": [{k: r[k] for k in keep} for r in result["robots"]],

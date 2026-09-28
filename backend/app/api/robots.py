@@ -16,7 +16,7 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models import Bot, User
 from app.schemas import BotIn, CreateRobotIn, RankIn, normalize_symbol
-from app.services import ranking
+from app.services import fees, ranking
 from app.services.llm import resolve_ai
 from app.services.stats import bot_summary
 
@@ -95,10 +95,12 @@ async def coin(symbol: str, user: User = Depends(get_current_user), db: Session 
 
 
 @router.post("/rank")
-async def rank(body: RankIn, _: User = Depends(get_current_user)):
-    """Testa todos os robôs do nível de volatilidade na moeda e ordena do melhor ao pior."""
+async def rank(body: RankIn, user: User = Depends(get_current_user)):
+    """Testa todos os robôs do nível de volatilidade na moeda e ordena do melhor ao pior,
+    com a taxa que a conta paga na OKX."""
+    fee = await run_in_threadpool(fees.account_fee_pct, user.id, body.symbol)
     try:
-        result = await run_in_threadpool(ranking.rank, body.symbol, body.level, body.refresh)
+        result = await run_in_threadpool(ranking.rank, body.symbol, body.level, body.refresh, fee)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
@@ -109,8 +111,9 @@ async def rank(body: RankIn, _: User = Depends(get_current_user)):
 @router.post("/advice")
 async def advice(body: RankIn, user: User = Depends(get_current_user)):
     """Qual robô faz mais sentido (IA, se houver chave; senão, as regras do ranking)."""
+    fee = await run_in_threadpool(fees.account_fee_pct, user.id, body.symbol)
     try:
-        result = await run_in_threadpool(ranking.rank, body.symbol, body.level, False)
+        result = await run_in_threadpool(ranking.rank, body.symbol, body.level, False, fee)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     ai = resolve_ai(user.id)
@@ -123,7 +126,8 @@ def create(body: CreateRobotIn, user: User = Depends(get_current_user), db: Sess
     robot = ranking.find_robot(body.level, body.robot_key)
     if robot is None:
         raise HTTPException(400, "Robô inválido para essa volatilidade.")
-    risk = RiskConfig(**{**robot["risk"], "sizing_mode": "fixed_quote", "order_size_quote": body.amount})
+    fee = fees.account_fee_pct(user.id, body.symbol)  # o simulado cobra o mesmo que a OKX cobraria
+    risk = RiskConfig(**{**robot["risk"], "sizing_mode": "fixed_quote", "order_size_quote": body.amount, **({} if fee is None else {"fee_pct": fee})})
     base = body.symbol.removesuffix("USDT")
     bot_in = BotIn(
         name=(body.name.strip() or f"{base} · {robot['name']}")[:120],

@@ -39,7 +39,7 @@ from app.core.sentiment import sentiment
 from app.db import session_scope
 from app.models import AutoCycle, AutoRobot, AutoTrader, Bot, NewsItem, Position, User, utcnow
 from app.schemas import BotIn
-from app.services import optimizer, ranking
+from app.services import fees, optimizer, ranking
 from app.services.llm import AIConfig, error_message, resolve_ai, structured
 from app.services.stats import bot_summary
 
@@ -56,6 +56,7 @@ RETIRED_COOLDOWN = timedelta(days=14)  # robô encerrado por ir mal não é recr
 ROBOT_LOSS_LIMIT_PCT = 10.0
 TOTAL_LOSS_LIMIT_PCT = 20.0
 POOL_FOR_AI = 12
+CONFIDENCE_TRADES = 10  # com 10 operações, a nota vale metade; quanto mais operações, mais perto do valor cheio
 STATE_ORDER = {"active": 0, "retiring": 1, "retired": 2}
 ROW_KEYS = (
     "key", "name", "strategy", "interval", "return_pct", "recent_return_pct", "drawdown_pct", "trades",
@@ -212,22 +213,32 @@ def approved(r: dict) -> bool:
     return bool(r["eligible"]) and r["return_pct"] > 0 and r["recent_return_pct"] > 0 and r["score"] > 0
 
 
-def scan(symbols: list[str]) -> tuple[list[dict], list[str]]:
-    """Todos os robôs das volatilidades baixa e média nas moedas, dos aprovados para os reprovados."""
+def confidence(trades: int) -> float:
+    """Quanto confiar no resultado pelo número de operações: 4 operações valem 29%, 10 valem 50%, 40 valem 80%."""
+    return trades / (trades + CONFIDENCE_TRADES) if trades > 0 else 0.0
+
+
+def scan(symbols: list[str], fee_for: dict[str, float | None] | None = None) -> tuple[list[dict], list[str]]:
+    """Todos os robôs das volatilidades baixa e média nas moedas, dos aprovados para os reprovados.
+
+    fee_for: taxa por ordem da conta em cada moeda (None = taxa padrão)."""
     rows: list[dict] = []
     errors: list[str] = []
     for symbol in symbols:
+        fee = (fee_for or {}).get(symbol)
         for level in LEVELS_SCANNED:
             try:
-                result = ranking.rank(symbol, level)
+                result = ranking.rank(symbol, level, fee_pct=fee)
             except Exception as exc:
                 errors.append(f"{symbol} ({ranking.LEVELS[level]['label'].lower()}): {exc}"[:200])
                 continue
             for r in result["robots"]:
                 row = {k: r[k] for k in ROW_KEYS}
-                # os períodos testados mudam com a volatilidade (2 anos x 1 ano): compara por ano
-                row.update(symbol=symbol, level=level, days=result["days"], pick=f"{symbol}|{r['key']}",
-                           yearly_score=round(r["score"] * 365 / result["days"], 2), approved=approved(r))  # fmt: skip
+                # os períodos testados mudam com a volatilidade (2 anos x 1 ano): compara por ano; e poucas
+                # operações pesam menos (4 operações com +300% numa alta forte pode ter sido sorte)
+                yearly = r["score"] * 365 / result["days"]
+                row.update(symbol=symbol, level=level, days=result["days"], pick=f"{symbol}|{r['key']}", fee_pct=fee,
+                           yearly_score=round(yearly * confidence(r["trades"]), 2), approved=approved(r))  # fmt: skip
                 rows.append(row)
     rows.sort(key=lambda r: (not r["approved"], -r["yearly_score"]))
     return rows, errors
@@ -300,11 +311,11 @@ AI_SYSTEM = """Você é o gestor do modo automático do Bot Trader (OKX Spot, s�
 Você recebe:
 - o valor total que pode usar, quantos robôs cabem, quanto cada um recebe e quantas vagas estão livres;
 - os robôs que você já opera, com o resultado real de cada um, o que o teste prometia quando foi escolhido ("expected") e o teste de hoje ("test");
-- os robôs aprovados no teste de hoje (lucro no período todo E no recente, com operações suficientes), de várias moedas, do melhor ao pior. "pick" identifica cada um; yearly_score compara robôs testados em períodos diferentes;
+- os robôs aprovados no teste de hoje (lucro no período todo E no recente, com operações suficientes), de várias moedas, do melhor ao pior. "pick" identifica cada um; yearly_score compara robôs testados em períodos diferentes e já pesa menos quando há poucas operações;
 - o índice de medo e ganância e notícias recentes.
 
 Regras:
-- picks: os robôs NOVOS para as vagas livres, em ordem de preferência. Só entre os aprovados, no máximo um por moeda e nunca numa moeda que já tem robô. Prefira consistência (bom no período todo e no recente) e queda máxima menor; diversifique entre moedas.
+- picks: os robôs NOVOS para as vagas livres, em ordem de preferência. Só entre os aprovados, no máximo um por moeda e nunca numa moeda que já tem robô. Prefira consistência (bom no período todo e no recente), queda máxima menor e muitas operações (com menos de 10, um resultado alto pode ter sido sorte); diversifique entre moedas.
 - retire: só se um robô atual deve ser trocado (resultado real muito pior que o esperado, ou um aprovado claramente melhor). Robôs com menos de 3 dias não podem ser trocados. Não troque à toa: cada troca custa taxas. A vaga de um robô trocado pode ser preenchida neste mesmo ciclo.
 - hold_cash: true só se o mercado estiver tão ruim que é melhor deixar o dinheiro parado em USDT agora (nesse caso, picks vazio).
 - summary: 2 a 4 frases para a pessoa, dizendo o que você fez e por quê, com os números que importam. Sem jargão.
@@ -362,7 +373,7 @@ def _fear_greed():
         return None
 
 
-def ai_context(cfg_data: dict, free_slots: int, mine: list[dict], pool: list[dict], news: list[dict]) -> str:
+def ai_context(cfg_data: dict, free_slots: int, mine: list[dict], pool: list[dict], news: list[dict], fee_pct: list[float] | None = None) -> str:
     keys = ("bot_id", "name", "symbol", "interval", "state", "age_days", "allocation", "pnl", "pnl_pct", "trades", "win_rate", "open_position", "expected")
     data = {
         "modo": "simulado" if cfg_data["mode"] == "paper" else "dinheiro real",
@@ -370,6 +381,7 @@ def ai_context(cfg_data: dict, free_slots: int, mine: list[dict], pool: list[dic
         "robos_no_maximo": cfg_data["slots"],
         "valor_por_robo_usdt": cfg_data["allocation"],
         "vagas_livres": free_slots,
+        "taxa_por_ordem_pct_ja_descontada_nos_testes": fee_pct or None,
         "robos_atuais": [
             {**{k: c.get(k) for k in keys}, "test": pool_view(c["test"]) if c.get("test") else None, "regra_manda_encerrar": c.get("rule_reason")}
             for c in mine
@@ -396,7 +408,8 @@ def create_robot(db: Session, user: User, cfg: AutoTrader, row: dict, reason: st
         return None, "robô fora do catálogo"
     alloc = allocation(cfg)
     base = row["symbol"].removesuffix("USDT")
-    risk = RiskConfig(**{**robot["risk"], "sizing_mode": "fixed_quote", "order_size_quote": alloc})
+    fee = {} if row.get("fee_pct") is None else {"fee_pct": row["fee_pct"]}  # o simulado cobra o mesmo que a OKX
+    risk = RiskConfig(**{**robot["risk"], "sizing_mode": "fixed_quote", "order_size_quote": alloc, **fee})
     body = BotIn(
         name=f"{base} · {robot['name']} (IA)"[:120],
         symbol=row["symbol"],
@@ -416,6 +429,7 @@ def create_robot(db: Session, user: User, cfg: AutoTrader, row: dict, reason: st
     if cfg.mode == "live":
         ap.mode, ap.live_authorized_at = "auto_all", cfg.live_authorized_at
     expected = {k: row[k] for k in ("return_pct", "recent_return_pct", "drawdown_pct", "trades", "win_rate_pct", "buy_hold_pct", "days")}
+    expected["fee_pct"] = risk.fee_pct
     db.add(AutoRobot(bot_id=bot.id, user_id=user.id, state="active", allocation=alloc, level=row["level"], reason=reason[:2000], expected=expected))
     add_event(db, bot.id, "info", f"Criado pelo modo automático: {reason}.")
     start_bot_record(db, bot)
@@ -486,7 +500,8 @@ def _execute(cycle_id: int, ai_config: AIConfig | None, client=None) -> None:
         log.warning("Lista de moedas da OKX indisponível: %s", exc)
         top = list(ranking.PREWARM_SYMBOLS)
     symbols = list(dict.fromkeys([c["symbol"] for c in mine] + top))
-    rows, errors = scan(symbols)
+    fee_for = {s: fees.account_fee_pct(user_id, s) for s in symbols}  # a taxa real da conta entra nos testes
+    rows, errors = scan(symbols, fee_for)
     by_pick = {r["pick"]: r for r in rows}
     pool = [r for r in rows if r["approved"] and r["pick"] not in blocked]
 
@@ -505,7 +520,8 @@ def _execute(cycle_id: int, ai_config: AIConfig | None, client=None) -> None:
         try:
             with session_scope() as db:
                 news = _market_news(db, symbols)
-            ai_out, ai_model = structured(ai_config, AI_SYSTEM, ai_context(cfg_data, free_slots, mine, pool, news), AI_SCHEMA, "modo_automatico", 4000, client=client)
+            context = ai_context(cfg_data, free_slots, mine, pool, news, sorted({f for f in fee_for.values() if f is not None}))
+            ai_out, ai_model = structured(ai_config, AI_SYSTEM, context, AI_SCHEMA, "modo_automatico", 4000, client=client)
         except Exception as exc:
             log.warning("IA indisponível no modo automático: %s", exc)
             ai_note = f"{error_message(exc, ai_config).rstrip('.')}. Neste ciclo, a decisão seguiu as regras do ranking."
@@ -575,6 +591,7 @@ def _execute(cycle_id: int, ai_config: AIConfig | None, client=None) -> None:
             summary = _rules_summary(len(rows), len(symbols), len(pool), actions, free, hold_cash)
         if ai_note:
             summary += f" ({ai_note})"
+        summary += _fee_note(fee_for)
         if errors:
             summary += f" Não consegui testar {len(errors)} combinação(ões) de moeda e volatilidade (histórico curto ou OKX indisponível)."
         cycle.status, cycle.finished_at = "done", utcnow()
@@ -584,6 +601,18 @@ def _execute(cycle_id: int, ai_config: AIConfig | None, client=None) -> None:
         cycle.ai_model = ai_model[:64] if use_ai else ""
         cfg.last_run_at = utcnow()
         cfg.next_run_at = utcnow() + timedelta(hours=CYCLE_HOURS)
+
+
+def _fee_note(fee_for: dict[str, float | None]) -> str:
+    known = sorted({f for f in fee_for.values() if f is not None})
+    if not known:
+        return ""
+
+    def fmt(f: float) -> str:
+        return f"{f:.2f}%".replace(".", ",")
+
+    shown = fmt(known[0]) if len(known) == 1 else f"de {fmt(known[0])} a {fmt(known[-1])}"
+    return f" Os testes já descontam a taxa real da sua conta na OKX: {shown} por ordem."
 
 
 def _rules_summary(n_tested: int, n_coins: int, n_approved: int, actions: list[dict], free: int, hold_cash: bool) -> str:
