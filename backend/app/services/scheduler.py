@@ -6,6 +6,8 @@
 - piloto automático: confere a cada minuto se algum bot ligado chegou na hora do ciclo;
 - modo automático: a cada minuto confere os limites de perda, encerra os robôs que
   terminaram de sair e dispara o ciclo diário (que roda numa thread à parte);
+- aprendizado da IA: a cada 6 horas guarda as previsões da semana e confere as vencidas
+  (na primeira vez, aprende com o histórico); roda numa thread à parte;
 - limpeza de registros antigos: uma vez por dia.
 
 Uma tarefa que falha (ex.: site de notícias fora do ar) só é tentada de novo
@@ -82,6 +84,20 @@ def _auto() -> None:
     autotrade.tick()
 
 
+_learning_thread: threading.Thread | None = None
+
+
+def _learning() -> None:
+    """A IA confere o que cada estratégia prometia (pode levar minutos na primeira vez)."""
+    global _learning_thread
+    from app.services import learning
+
+    if _learning_thread is not None and _learning_thread.is_alive():
+        return
+    _learning_thread = threading.Thread(target=learning.tick, daemon=True, name="learning")
+    _learning_thread.start()
+
+
 _prewarm_thread: threading.Thread | None = None
 
 
@@ -115,6 +131,7 @@ class Scheduler:
             ("auto", 60, _auto),
             ("autopilot", 60, autopilot_tick),
             ("prewarm", 6 * 3600, _prewarm),
+            ("learning", 6 * 3600, _learning),
             ("prune", 86400, _prune),
         ]
 

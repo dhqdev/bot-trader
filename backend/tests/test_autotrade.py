@@ -14,8 +14,8 @@ from app.core.engine import BotService, manager
 from app.core.exchange import SymbolRules
 from app.db import session_scope
 from app.main import app
-from app.models import AutopilotConfig, AutoCycle, AutoRobot, AutoTrader, Bot, Position, User, utcnow
-from app.services import autotrade, fees, ranking
+from app.models import AutopilotConfig, AutoCycle, AutoRobot, AutoTrader, Bot, LearningSample, Position, User, utcnow
+from app.services import autotrade, fees, learning, optimizer, ranking, tradable
 from app.services.llm import AIConfig
 
 from .conftest import FakeMarket
@@ -88,6 +88,7 @@ def offline(monkeypatch, table):
     monkeypatch.setattr(autotrade, "_ai_for", lambda user_id: None)
     monkeypatch.setattr(autotrade, "launch", lambda cycle_id, ai: autotrade.execute(cycle_id, ai))
     monkeypatch.setattr(fees, "account_fee_pct", lambda user_id, symbol: None)  # sem chave da OKX: taxa padrão
+    monkeypatch.setattr(tradable, "account_symbols", lambda user_id: None)  # sem chave: todas as moedas públicas
     yield market
 
 
@@ -101,7 +102,7 @@ def api(fresh_db):
 @pytest.fixture(autouse=True)
 def clean(api):
     with session_scope() as db:
-        for model in (AutoCycle, AutoRobot, AutoTrader, Bot):
+        for model in (AutoCycle, AutoRobot, AutoTrader, Bot, LearningSample):
             db.execute(delete(model))
     yield
 
@@ -154,6 +155,47 @@ def test_turning_on_picks_diversified_approved_robots(api):
     assert {p["pick"] for p in cycle["pool"]} == {"BTCUSDT|squeeze:4h", "ETHUSDT|squeeze:4h", "BTCUSDT|ignition:1h", "BTCUSDT|confluence:1d"}
     assert data["performance"]["active_robots"] == 2 and data["running"] is False
     assert api.post("/api/auto/start", json={"budget": 4}).status_code == 422  # menos de 5 USDT não dá nem um robô
+
+
+def test_manual_and_automatic_are_one_or_the_other(api):
+    api.post("/api/auto/start", json={})
+    auto_bot = _bot_by_symbol("BTCUSDT")
+    manual = {"symbol": "SOLUSDT", "level": "baixa", "amount": 50, "robot_key": "squeeze:4h", "mode": "paper"}
+    r = api.post("/api/robots/create", json=manual)
+    assert r.status_code == 409 and "um ou outro" in r.json()["detail"]
+    assert api.post(f"/api/bots/{auto_bot.id}/start").status_code == 200  # o robô do próprio automático pode ser religado
+
+    api.post("/api/auto/stop")
+    with session_scope() as db:  # encerrado pelo automático e religado por você: vira manual e compra normalmente
+        assert db.get(AutoRobot, auto_bot.id).state == "retired"
+        assert BotService(db, db.get(Bot, auto_bot.id), None, None).can_enter()[0] is True
+
+    bot = api.post("/api/robots/create", json=manual).json()
+    assert bot["status"] == "running"
+    with session_scope() as db:  # a IA do robô ajusta as regras, mas segue a estratégia que você escolheu
+        assert optimizer.get_autopilot(db, db.get(Bot, bot["id"])).allow_strategy_change is False
+    r = api.post("/api/auto/start", json={})
+    assert r.status_code == 409 and "um ou outro" in r.json()["detail"] and bot["name"] in r.json()["detail"]
+    assert [b["id"] for b in api.get("/api/auto").json()["manual_running"]] == [bot["id"]]
+    api.post(f"/api/bots/{bot['id']}/stop")
+    assert api.post("/api/auto/start", json={}).status_code == 200
+
+
+def test_auto_mode_only_scans_coins_released_on_the_account(api, monkeypatch, rank_calls):
+    monkeypatch.setattr(tradable, "account_symbols", lambda user_id: {"ETHUSDT", "SOLUSDT"})
+    api.post("/api/auto/start", json={})
+    assert {symbol for symbol, _, _ in rank_calls} == {"ETHUSDT", "SOLUSDT"}
+    assert [b.symbol for _, b in _robots("active")] == ["ETHUSDT"]  # SOL foi reprovado e BTC não está liberado
+
+
+def test_auto_mode_avoids_what_the_ai_learned_does_not_deliver(api, monkeypatch):
+    learned = {"squeeze:4h": {"samples": 100, "promised_30d": 2.5, "delivered_30d": -3.0, "hit_rate": 10, "factor": 0.4}}
+    monkeypatch.setattr(learning, "calibration", lambda user_id: learned)
+    data = api.post("/api/auto/start", json={}).json()
+    # BTC e ETH squeeze eram os melhores no teste, mas a IA aprendeu que essa estratégia não entrega
+    assert [(b.symbol, f"{b.strategy}:{b.interval}") for _, b in _robots("active")] == [("BTCUSDT", "ignition:1h")]
+    assert all(p["pick"].split("|")[1] != "squeeze:4h" for p in data["cycles"][0]["pool"])
+    assert data["learning"]["pending"] > 0  # as previsões deste ciclo ficam guardadas para conferir depois
 
 
 def test_simulation_uses_the_chosen_amount(api):

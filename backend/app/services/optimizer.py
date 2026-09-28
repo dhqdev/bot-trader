@@ -60,7 +60,7 @@ CROSS_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 TUNABLE_RISK = (
     "stop_loss_mode", "stop_loss_pct", "stop_loss_atr_mult", "take_profits", "breakeven_at_pct",
     "trailing_enabled", "trailing_mode", "trailing_pct", "trailing_atr_mult", "trailing_activation_pct",
-    "cooldown_bars", "sentiment_filter", "fear_threshold",
+    "cooldown_bars", "sentiment_filter", "fear_threshold", "min_move_mult", "btc_trend_days",
 )  # fmt: skip
 
 RISK_LABELS = {
@@ -77,6 +77,8 @@ RISK_LABELS = {
     "cooldown_bars": "pausa após vender",
     "sentiment_filter": "filtro de sentimento",
     "fear_threshold": "limite de medo",
+    "min_move_mult": "movimento mínimo (× custo)",
+    "btc_trend_days": "tendência do Bitcoin (dias)",
 }
 
 _run_lock = threading.Lock()
@@ -93,7 +95,8 @@ def get_autopilot(db: Session, bot: Bot) -> AutopilotConfig:
             bot_id=bot.id,
             mode=DEFAULT_MODE,
             interval_hours=DEFAULT_INTERVAL_HOURS.get(tier_of(bot.interval), 168),
-            allow_strategy_change=True,
+            # o robô segue a estratégia escolhida (por você ou pelo modo automático); a IA só ajusta as regras
+            allow_strategy_change=False,
             next_run_at=utcnow() + timedelta(minutes=30),
         )
         db.add(cfg)
@@ -144,6 +147,8 @@ def _num(v) -> str:
 def _risk_value_label(name: str, v) -> str:
     if name == "sentiment_filter":
         return FILTER_LABELS.get(v, v)
+    if name in ("btc_trend_days", "min_move_mult") and not v:
+        return "desligado"
     return _num(v)
 
 
@@ -243,7 +248,24 @@ def generate_candidates(bot: Bot, allow_strategy_change: bool, previous: dict | 
         if mode != risk["sentiment_filter"]:
             risk_variant(f"sentiment:{mode}", f"Filtro de sentimento: {FILTER_LABELS[risk['sentiment_filter']]} → {FILTER_LABELS[mode]}", sentiment_filter=mode)
 
-    # 4) outras estratégias (padrões), se permitido
+    # 4) custo da operação e tendência do Bitcoin
+    move = risk["min_move_mult"]
+    if move > 0:
+        for mult in sorted({max(0.5, move - 0.5), move + 0.5}):
+            if mult != move:
+                risk_variant(f"risk:move={mult}", f"Movimento mínimo: {_num(move)} → {_num(mult)} × o custo de ida e volta", min_move_mult=mult)
+        risk_variant("risk:move=0", "Desligar o filtro de custo", min_move_mult=0.0)
+    else:
+        risk_variant("risk:move=1", "Só comprar se o candle anda 1 × o custo de ida e volta", min_move_mult=1.0)
+    btc = risk["btc_trend_days"]
+    if btc > 0:
+        risk_variant("risk:btc=0", "Desligar o filtro do Bitcoin", btc_trend_days=0)
+        other = 50 if btc != 50 else 100
+        risk_variant(f"risk:btc={other}", f"Bitcoin acima da média de {other} dias (em vez de {btc})", btc_trend_days=other)
+    else:
+        risk_variant("risk:btc=100", "Só comprar com o Bitcoin acima da média de 100 dias", btc_trend_days=100)
+
+    # 5) outras estratégias (padrões), se permitido
     if allow_strategy_change:
         for key, strat in STRATEGIES.items():
             if key == strategy.key:
@@ -252,7 +274,7 @@ def generate_candidates(bot: Bot, allow_strategy_change: bool, previous: dict | 
                                  strat.resolve_params(None), risk,
                                  [{"field": "strategy", "label": "Estratégia", "from": strategy.key, "to": key}]))  # fmt: skip
 
-    # 5) configuração anterior (o piloto pode desfazer a própria mudança)
+    # 6) configuração anterior (o piloto pode desfazer a própria mudança)
     if previous:
         try:
             prev_strategy = get_strategy(previous["strategy"])

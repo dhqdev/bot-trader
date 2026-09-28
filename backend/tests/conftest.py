@@ -94,6 +94,18 @@ def fresh_db():
 
 
 @pytest.fixture(autouse=True)
+def _offline_btc_trend(monkeypatch):
+    """O filtro de tendência do Bitcoin usa um diário sintético: os testes nunca vão à rede."""
+    from app.core import market_trend
+
+    daily = make_ohlcv(2200, seed=11, interval="1d")
+    monkeypatch.setattr(market_trend, "_history", lambda: daily)
+    market_trend.clear_cache()
+    yield
+    market_trend.clear_cache()
+
+
+@pytest.fixture(autouse=True)
 def _reset_login_limits():
     """Os limites de tentativas são globais: cada teste começa do zero."""
     from app.security import account_limiter, login_limiter, twofa_limiter

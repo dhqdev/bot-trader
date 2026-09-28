@@ -44,6 +44,15 @@ export function MarketFiltersView({ market }: { market: MarketFilters }) {
         Medo e ganância: {s ? <span className="text-ink">{s.value} ({s.label}){week}</span> : "sem dado"} · filtro{" "}
         {SENTIMENT_FILTER_LABELS[market.sentiment_filter] ?? market.sentiment_filter}
       </p>
+      {market.btc_trend && (
+        <p className="text-ink-2">
+          Bitcoin:{" "}
+          <span className={market.btc_trend.ok ? "text-good-text" : "text-warn-text"}>
+            {market.btc_trend.ok ? "acima" : "abaixo"} da média de {market.btc_trend.days} dias
+          </span>{" "}
+          (o robô só compra com ele acima)
+        </p>
+      )}
       <p className="text-ink-2">Notícias: trava {NEWS_GUARD_LABELS[market.news_guard] ?? market.news_guard}</p>
       {market.news_block && (
         <a href={market.news_block.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-start gap-1 text-warn-text hover:underline">

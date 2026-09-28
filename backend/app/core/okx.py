@@ -400,6 +400,15 @@ class OkxTrader:
     def free(self, asset: str) -> float:
         return self.balances().get(asset, (0.0, 0.0))[0]
 
+    def account_symbols(self) -> set[str]:
+        """Pares Spot que esta conta pode negociar: a OKX limita por região e pelo que a conta liberou."""
+        data = self.client.private("GET", "/api/v5/account/instruments", {"instType": "SPOT"})
+        return {
+            f"{i['baseCcy']}{i['quoteCcy']}".upper()
+            for i in data
+            if i.get("baseCcy") and i.get("quoteCcy") and i.get("state", "live") == "live"
+        }
+
     def taker_fee_pct(self, symbol: str) -> float:
         """Taxa (em %) que esta conta paga numa ordem a mercado no par. Varia por conta, nível e região:
         contas do Brasil no nível Lv1, por exemplo, pagam 0,4%. A OKX devolve a taxa cobrada como

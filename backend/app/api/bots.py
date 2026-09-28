@@ -11,6 +11,7 @@ from app.db import get_db
 from app.deps import get_current_user, get_user_bot
 from app.models import Bot, BotEvent, Order, Position, User
 from app.schemas import BotIn, BotUpdate
+from app.services import autotrade
 from app.services.stats import bot_summary, position_view, price_for
 
 router = APIRouter(prefix="/bots", tags=["bots"])
@@ -73,6 +74,8 @@ def start_bot_record(db: Session, bot: Bot) -> None:
 
 @router.post("")
 def create_bot(body: BotIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if blocked := autotrade.manual_blocked(db, user.id):
+        raise HTTPException(409, blocked)
     return bot_summary(db, create_bot_record(db, user, body))
 
 
@@ -123,6 +126,8 @@ def delete_bot(bot: Bot = Depends(get_user_bot), db: Session = Depends(get_db)):
 
 @router.post("/{bot_id}/start")
 def start_bot(bot: Bot = Depends(get_user_bot), db: Session = Depends(get_db)):
+    if blocked := autotrade.manual_blocked(db, bot.user_id, bot.id):
+        raise HTTPException(409, blocked)
     start_bot_record(db, bot)
     return bot_summary(db, bot)
 

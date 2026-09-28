@@ -23,7 +23,7 @@ router = APIRouter(prefix="/autopilot", tags=["autopilot"])
 class AutopilotIn(StepUpIn):
     mode: Literal["off", "suggest", "auto_paper", "auto_all"]
     interval_hours: int = Field(168, ge=6, le=24 * 30)
-    allow_strategy_change: bool = True
+    allow_strategy_change: bool = False
 
 
 def launch(run_id: int, ai: AIConfig | None) -> None:

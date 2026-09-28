@@ -76,6 +76,7 @@ class SqueezeBreakoutStrategy(Strategy):
               help="Evita comprar tarde: depois disso o sinal é ignorado."),
         TREND_PARAM,
         USE_TREND_PARAM,
+        HTF_PARAM,
         Param("exit_mode", "Regra de saída", "select", "mid", options=["mid", "momentum"],
               labels=["Preço perde a média do canal", "Momentum fica negativo"],
               help="Nos testes, sair pela média do canal deu resultado melhor."),
@@ -104,6 +105,8 @@ class SqueezeBreakoutStrategy(Strategy):
             "Momentum crescendo": momentum > momentum.shift(1),
             "Preço acima da EMA de tendência": trend_ok,
         }
+        if p["htf_ema"] > 0:
+            entry_conditions["Tendência de fundo em alta"] = _htf_uptrend(close, p["htf_ema"])
         if p["exit_mode"] == "mid":
             exit_conditions = {"Preço abaixo da média do canal": close < kc_mid}
         else:
@@ -204,6 +207,7 @@ class VolMomentumStrategy(Strategy):
               help="0 = sai quando o retorno da janela deixa de ser positivo."),
         TREND_PARAM,
         USE_TREND_PARAM,
+        HTF_PARAM,
     ]  # fmt: skip
 
     def compute(self, df, p):
@@ -219,6 +223,8 @@ class VolMomentumStrategy(Strategy):
             f"Força cruzou acima de {p['z_entry']:g}": ta.crossed_above(z, p["z_entry"]),
             "Preço acima da EMA de tendência": trend_ok,
         }
+        if p["htf_ema"] > 0:
+            entry_conditions["Tendência de fundo em alta"] = _htf_uptrend(close, p["htf_ema"])
         exit_conditions = {f"Força abaixo de {p['z_exit']:g}": z < p["z_exit"]}
         overlays = {f"EMA {p['trend_ema']}": trend} if p["use_trend_filter"] else {}
         return StrategyOutput(
@@ -250,6 +256,7 @@ class ConfluenceStrategy(Strategy):
         Param("ema_slow", "EMA lenta", "int", 21, 5, 200, 1,
               help="Média mais longa, de referência. Precisa ser maior que a rápida."),
         TREND_PARAM,
+        HTF_PARAM,
         Param("fresh_bars", "Cruzamento há no máximo (candles)", "int", 10, 1, 60, 1,
               help="Só compra se o cruzamento das médias for recente, para não entrar no fim do movimento."),
         Param("min_score", "Confirmações mínimas (de 5)", "int", 4, 0, 5, 1,
@@ -293,6 +300,8 @@ class ConfluenceStrategy(Strategy):
             f"{p['min_score']}+ confirmações (de 5)": score >= p["min_score"],
             f"RSI ≤ {p['rsi_max']:g}": r <= p["rsi_max"],
         }
+        if p["htf_ema"] > 0:
+            entry_conditions["Tendência de fundo em alta"] = _htf_uptrend(close, p["htf_ema"])
         entry_conditions.update({f"· {k}": v for k, v in confirmations.items()})  # informativo
 
         exit_conditions = {"EMA rápida abaixo da lenta": fast < slow}
@@ -333,6 +342,7 @@ class DonchianBreakoutStrategy(Strategy):
               help="Força mínima da tendência (0 a 100). 0 desliga o filtro."),
         TREND_PARAM,
         USE_TREND_PARAM,
+        HTF_PARAM,
     ]  # fmt: skip
 
     def compute(self, df, p):
@@ -351,6 +361,8 @@ class DonchianBreakoutStrategy(Strategy):
             f"ADX ≥ {p['adx_min']:g}": adx >= p["adx_min"] if p["adx_min"] > 0 else always(df.index),
             "Preço acima da EMA de tendência": trend_ok,
         }
+        if p["htf_ema"] > 0:
+            entry_conditions["Tendência de fundo em alta"] = _htf_uptrend(close, p["htf_ema"])
         exit_conditions = {f"Fechou abaixo da mínima de {p['exit_period']} candles": close < lower_prev}
         overlays = {"Donchian topo": upper_prev, "Donchian saída": lower_prev}
         if p["use_trend_filter"]:
@@ -400,6 +412,7 @@ class HiLoRsiStrategy(Strategy):
               help="Por quantos candles o sistema 'lembra' que o RSI ficou alto."),
         TREND_PARAM,
         USE_TREND_PARAM,
+        HTF_PARAM,
         Param("use_atr_filter", "Filtro de volatilidade", "bool", True,
               help="Evita operar com o mercado parado demais ou nervoso demais."),
         Param("atr_min_pct", "Volatilidade mínima (ATR % do preço)", "float", 0.4, 0.0, 10.0, 0.1,
@@ -425,6 +438,8 @@ class HiLoRsiStrategy(Strategy):
             "Preço acima da EMA de tendência": trend_ok,
             "Volatilidade (ATR%) na faixa": atr_ok,
         }
+        if p["htf_ema"] > 0:
+            entry_conditions["Tendência de fundo em alta"] = _htf_uptrend(close, p["htf_ema"])
         if p["fresh_bars"] > 0:
             entry_conditions[f"Virada do HiLo há ≤ {p['fresh_bars']} candles"] = since_flip <= p["fresh_bars"]
         recent_max = r.rolling(p["lookback"], min_periods=1).max()

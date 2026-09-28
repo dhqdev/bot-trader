@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from app.core import indicators as ta
+from app.core import market_trend
 from app.core.exchange import INTERVAL_MINUTES
 from app.core.risk import RiskConfig, open_position, position_size_quote, update
 from app.core.sentiment import entry_mask
@@ -39,9 +40,11 @@ def run_backtest(
     max_curve_points: int = 600,
     sentiment: tuple[np.ndarray, np.ndarray] | None = None,
     start_index: int | None = None,
+    market_ok: np.ndarray | None = None,
 ) -> dict:
     """`sentiment`: índice de medo e ganância alinhado aos candles (core/sentiment.py).
-    `start_index`: primeiro candle negociado (os anteriores só aquecem os indicadores)."""
+    `start_index`: primeiro candle negociado (os anteriores só aquecem os indicadores).
+    `market_ok`: True onde o mercado como um todo deixa comprar (ex.: Bitcoin em alta), alinhado aos candles."""
     strategy = get_strategy(strategy_key)
     resolved = strategy.resolve_params(params)
     if len(df) < 50:
@@ -58,6 +61,17 @@ def run_backtest(
     if sentiment is not None and risk.sentiment_filter != "off":
         allowed = entry_mask(risk.sentiment_filter, sentiment[0], sentiment[1], risk.fear_threshold)
     blocked_by_sentiment = 0
+    # custo da operação: o candle precisa andar o bastante para pagar a ida e a volta (igual ao motor)
+    covers_cost = np.ones(n, dtype=bool)
+    if risk.min_move_mult > 0:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            atr_pct = np.nan_to_num(atr / closes * 100, nan=0.0, posinf=0.0)
+        covers_cost = atr_pct >= risk.min_move_mult * risk.round_trip_cost_pct()
+    blocked_by_cost = 0
+    if market_ok is None and risk.btc_trend_days > 0:
+        market_ok = market_trend.aligned(df, risk.btc_trend_days)  # None se o Bitcoin não carregar: não bloqueia
+    market = np.ones(n, dtype=bool) if market_ok is None else np.asarray(market_ok, dtype=bool)
+    blocked_by_market = 0
     if start_index is not None:
         start = min(max(start_index, 1), n - 2)
     else:
@@ -149,10 +163,14 @@ def run_backtest(
         # 3) sinais no fechamento
         blocked_today = risk.max_daily_loss_quote > 0 and daily_pnl.get(_day(int(times[i])), 0.0) <= -risk.max_daily_loss_quote
         if state is None and entry[i] and i >= cooldown_until and not blocked_today and i < n - 1:
-            if allowed[i]:
-                pending = "buy"
-            else:
+            if not allowed[i]:
                 blocked_by_sentiment += 1
+            elif not market[i]:
+                blocked_by_market += 1
+            elif not covers_cost[i]:
+                blocked_by_cost += 1
+            else:
+                pending = "buy"
         elif state is not None and exit_[i]:
             pending = "sell"
 
@@ -165,6 +183,8 @@ def run_backtest(
 
     result = _report(df, equity[start:], times[start:], closes[start:], trades, initial_capital, interval, bars_in_market, max_curve_points)
     result["metrics"]["entries_blocked_by_sentiment"] = blocked_by_sentiment
+    result["metrics"]["entries_blocked_by_cost"] = blocked_by_cost
+    result["metrics"]["entries_blocked_by_market"] = blocked_by_market
     no_data = risk.sentiment_filter != "off" and sentiment is None
     result["metrics"]["sentiment_filter"] = "sem dados" if no_data else risk.sentiment_filter
     return result

@@ -16,7 +16,7 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models import Bot, User
 from app.schemas import BotIn, CreateRobotIn, RankIn, normalize_symbol
-from app.services import fees, ranking
+from app.services import autotrade, fees, ranking, tradable
 from app.services.llm import resolve_ai
 from app.services.stats import bot_summary
 
@@ -41,13 +41,35 @@ def levels(_: User = Depends(get_current_user)):
     return [{k: v for k, v in level.items()} for level in ranking.LEVELS.values()]
 
 
+def _require_tradable(user_id: int, symbol: str) -> None:
+    if not tradable.is_tradable(user_id, symbol):
+        raise HTTPException(400, tradable.NOT_TRADABLE)
+
+
+@router.get("/symbols")
+def symbols(user: User = Depends(get_current_user)):
+    """Pares contra USDT para a busca: só os que a sua conta da OKX pode negociar (se a chave estiver cadastrada)."""
+    try:
+        items = get_market().symbols("USDT")
+    except Exception as exc:
+        raise HTTPException(502, f"OKX indisponível: {exc}") from exc
+    allowed = tradable.account_symbols(user.id)
+    return {
+        "symbols": [s for s in items if allowed is None or s["symbol"] in allowed],
+        "from_account": allowed is not None,
+    }
+
+
 @router.get("/coins")
-def coins(_: User = Depends(get_current_user)):
-    """As moedas mais negociadas na OKX contra USDT, com preço e variação em 24 h."""
+def coins(user: User = Depends(get_current_user)):
+    """As moedas mais negociadas na OKX contra USDT (entre as que a sua conta pode negociar), com preço e variação em 24 h."""
     try:
         tickers = get_market().tickers()
     except Exception as exc:
         raise HTTPException(502, f"OKX indisponível: {exc}") from exc
+    allowed = tradable.account_symbols(user.id)
+    if allowed is not None:
+        tickers = {s: t for s, t in tickers.items() if s in allowed}
     return [
         {
             "symbol": s,
@@ -65,6 +87,7 @@ def coins(_: User = Depends(get_current_user)):
 async def coin(symbol: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Quanto a moeda oscila e quanto você tem dela (e de USDT) na OKX."""
     symbol = normalize_symbol(symbol)
+    await run_in_threadpool(_require_tradable, user.id, symbol)
     try:
         market = get_market()
         inst = await run_in_threadpool(market.inst, symbol)
@@ -98,6 +121,7 @@ async def coin(symbol: str, user: User = Depends(get_current_user), db: Session 
 async def rank(body: RankIn, user: User = Depends(get_current_user)):
     """Testa todos os robôs do nível de volatilidade na moeda e ordena do melhor ao pior,
     com a taxa que a conta paga na OKX."""
+    await run_in_threadpool(_require_tradable, user.id, body.symbol)
     fee = await run_in_threadpool(fees.account_fee_pct, user.id, body.symbol)
     try:
         result = await run_in_threadpool(ranking.rank, body.symbol, body.level, body.refresh, fee)
@@ -111,6 +135,7 @@ async def rank(body: RankIn, user: User = Depends(get_current_user)):
 @router.post("/advice")
 async def advice(body: RankIn, user: User = Depends(get_current_user)):
     """Qual robô faz mais sentido (IA, se houver chave; senão, as regras do ranking)."""
+    await run_in_threadpool(_require_tradable, user.id, body.symbol)
     fee = await run_in_threadpool(fees.account_fee_pct, user.id, body.symbol)
     try:
         result = await run_in_threadpool(ranking.rank, body.symbol, body.level, False, fee)
@@ -123,6 +148,9 @@ async def advice(body: RankIn, user: User = Depends(get_current_user)):
 @router.post("/create")
 def create(body: CreateRobotIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Cria o robô escolhido no ranking. A configuração vem do catálogo do servidor, nunca do navegador."""
+    if blocked := autotrade.manual_blocked(db, user.id):
+        raise HTTPException(409, blocked)  # é um ou outro: automático ou manual
+    _require_tradable(user.id, body.symbol)
     robot = ranking.find_robot(body.level, body.robot_key)
     if robot is None:
         raise HTTPException(400, "Robô inválido para essa volatilidade.")

@@ -39,7 +39,7 @@ from app.core.sentiment import sentiment
 from app.db import session_scope
 from app.models import AutoCycle, AutoRobot, AutoTrader, Bot, NewsItem, Position, User, utcnow
 from app.schemas import BotIn
-from app.services import fees, optimizer, ranking
+from app.services import fees, learning, optimizer, ranking, tradable
 from app.services.llm import AIConfig, error_message, resolve_ai, structured
 from app.services.stats import bot_summary
 
@@ -64,7 +64,7 @@ ROW_KEYS = (
 )  # fmt: skip
 POOL_KEYS = (
     "pick", "symbol", "name", "level", "interval", "return_pct", "recent_return_pct", "drawdown_pct",
-    "trades", "win_rate_pct", "buy_hold_pct", "days", "yearly_score",
+    "trades", "win_rate_pct", "buy_hold_pct", "days", "yearly_score", "learned_factor",
 )  # fmt: skip
 
 _lock = threading.Lock()  # um ciclo por vez: os testes são pesados para a CPU
@@ -142,6 +142,42 @@ def managed(db: Session, user_id: int, states: list[str] | None = None, mode: st
     if mode:
         q = q.where(Bot.mode == mode)
     return [(ar, bot) for ar, bot in db.execute(q.order_by(AutoRobot.created_at))]
+
+
+def manual_running(db: Session, user_id: int) -> list[Bot]:
+    """Robôs ligados que você mesmo escolheu (fora do modo automático)."""
+    auto_ids = set(db.scalars(select(AutoRobot.bot_id).where(AutoRobot.user_id == user_id, AutoRobot.state.in_(["active", "retiring"]))))
+    return [b for b in db.scalars(select(Bot).where(Bot.user_id == user_id, Bot.status == "running").order_by(Bot.id)) if b.id not in auto_ids]
+
+
+MANUAL_BLOCKED = (
+    "O modo automático está ligado, e é um ou outro: com ele ligado, quem escolhe e liga os robôs é a IA. "
+    "Para escolher você mesmo, desligue o modo automático."
+)
+
+
+def manual_blocked(db: Session, user_id: int, bot_id: int | None = None) -> str | None:
+    """Motivo para recusar criar ou ligar um robô escolhido por você (o modo automático está ligado), ou None."""
+    cfg = db.get(AutoTrader, user_id)
+    if cfg is None or not cfg.enabled:
+        return None
+    if bot_id is not None:
+        ar = db.get(AutoRobot, bot_id)
+        if ar is not None and ar.state == "active":
+            return None  # robô do próprio modo automático (ex.: religar depois de um erro)
+    return MANUAL_BLOCKED
+
+
+def auto_blocked(db: Session, user_id: int) -> str | None:
+    """Motivo para recusar ligar o modo automático (há robôs escolhidos por você ligados), ou None."""
+    manual = manual_running(db, user_id)
+    if not manual:
+        return None
+    names = ", ".join(b.name for b in manual[:3]) + ("…" if len(manual) > 3 else "")
+    return (
+        f"É um ou outro: você tem {len(manual)} robô(s) escolhido(s) por você ligado(s) ({names}). "
+        "Desligue-os em Robôs antes de ligar o modo automático."
+    )
 
 
 def _open_position(db: Session, bot_id: int) -> Position | None:
@@ -245,7 +281,7 @@ def scan(symbols: list[str], fee_for: dict[str, float | None] | None = None) -> 
 
 
 def pool_view(r: dict) -> dict:
-    return {k: r[k] for k in POOL_KEYS}
+    return {k: r.get(k) for k in POOL_KEYS}
 
 
 def _pick_text(r: dict) -> str:
@@ -288,6 +324,8 @@ def rule_reason(c: dict, test: dict | None) -> str | None:
     loss = loss_reason(c["pnl"], c["allocation"])
     if loss:
         return loss
+    if c["age"] >= MIN_AGE and test is not None and test.get("learned_block"):
+        return "a IA aprendeu que essa estratégia não entrega o que o teste promete"
     if c["age"] >= MIN_AGE and test is not None and not test["approved"]:
         return f"deixou de passar nos testes ({_pct(test['return_pct'])} no período todo, {_pct(test['recent_return_pct'])} no recente)"
     return None
@@ -312,10 +350,11 @@ Você recebe:
 - o valor total que pode usar, quantos robôs cabem, quanto cada um recebe e quantas vagas estão livres;
 - os robôs que você já opera, com o resultado real de cada um, o que o teste prometia quando foi escolhido ("expected") e o teste de hoje ("test");
 - os robôs aprovados no teste de hoje (lucro no período todo E no recente, com operações suficientes), de várias moedas, do melhor ao pior. "pick" identifica cada um; yearly_score compara robôs testados em períodos diferentes e já pesa menos quando há poucas operações;
-- o índice de medo e ganância e notícias recentes.
+- o índice de medo e ganância e notícias recentes;
+- o aprendizado da IA ("aprendizado_da_ia"): por estratégia e tempo de candle, quanto das previsões aprovadas no teste se cumpriu depois, no mercado real (promised_30d x delivered_30d, em % a cada 30 dias). "factor" acima de 1 = cumpre; abaixo = decepciona. yearly_score já inclui esse peso.
 
 Regras:
-- picks: os robôs NOVOS para as vagas livres, em ordem de preferência. Só entre os aprovados, no máximo um por moeda e nunca numa moeda que já tem robô. Prefira consistência (bom no período todo e no recente), queda máxima menor e muitas operações (com menos de 10, um resultado alto pode ter sido sorte); diversifique entre moedas.
+- picks: os robôs NOVOS para as vagas livres, em ordem de preferência. Só entre os aprovados, no máximo um por moeda e nunca numa moeda que já tem robô. Prefira consistência (bom no período todo e no recente), queda máxima menor, muitas operações (com menos de 10, um resultado alto pode ter sido sorte) e estratégias que o aprendizado mostra que cumprem o que prometem; diversifique entre moedas.
 - retire: só se um robô atual deve ser trocado (resultado real muito pior que o esperado, ou um aprovado claramente melhor). Robôs com menos de 3 dias não podem ser trocados. Não troque à toa: cada troca custa taxas. A vaga de um robô trocado pode ser preenchida neste mesmo ciclo.
 - hold_cash: true só se o mercado estiver tão ruim que é melhor deixar o dinheiro parado em USDT agora (nesse caso, picks vazio).
 - summary: 2 a 4 frases para a pessoa, dizendo o que você fez e por quê, com os números que importam. Sem jargão.
@@ -373,7 +412,8 @@ def _fear_greed():
         return None
 
 
-def ai_context(cfg_data: dict, free_slots: int, mine: list[dict], pool: list[dict], news: list[dict], fee_pct: list[float] | None = None) -> str:
+def ai_context(cfg_data: dict, free_slots: int, mine: list[dict], pool: list[dict], news: list[dict], fee_pct: list[float] | None = None,
+               learned: dict[str, dict] | None = None) -> str:
     keys = ("bot_id", "name", "symbol", "interval", "state", "age_days", "allocation", "pnl", "pnl_pct", "trades", "win_rate", "open_position", "expected")
     data = {
         "modo": "simulado" if cfg_data["mode"] == "paper" else "dinheiro real",
@@ -387,6 +427,7 @@ def ai_context(cfg_data: dict, free_slots: int, mine: list[dict], pool: list[dic
             for c in mine
         ],
         "aprovados_hoje": [pool_view(r) for r in pool[:POOL_FOR_AI]],
+        "aprendizado_da_ia": {k: v for k, v in (learned or {}).items() if k in {r["key"] for r in pool[:POOL_FOR_AI]}},
         "medo_e_ganancia": _fear_greed(),
     }
     return (
@@ -494,14 +535,22 @@ def _execute(cycle_id: int, ai_config: AIConfig | None, client=None) -> None:
         }
 
     # 2) testes (baixa o histórico que faltar e roda os backtests)
+    allowed = tradable.account_symbols(user_id)  # só as moedas que a conta da OKX pode negociar
     try:
-        top = [s for s, _ in ranking.liquid_coins(get_market().tickers(), COINS_SCANNED)]
+        tickers = get_market().tickers()
+        if allowed is not None:
+            tickers = {s: t for s, t in tickers.items() if s in allowed}
+        top = [s for s, _ in ranking.liquid_coins(tickers, COINS_SCANNED)]
     except Exception as exc:
         log.warning("Lista de moedas da OKX indisponível: %s", exc)
-        top = list(ranking.PREWARM_SYMBOLS)
+        top = [s for s in ranking.PREWARM_SYMBOLS if allowed is None or s in allowed]
     symbols = list(dict.fromkeys([c["symbol"] for c in mine] + top))
     fee_for = {s: fees.account_fee_pct(user_id, s) for s in symbols}  # a taxa real da conta entra nos testes
     rows, errors = scan(symbols, fee_for)
+    with session_scope() as db:
+        learning.record(db, user_id, rows)  # previsões da semana: a IA confere depois o que aconteceu
+    learned = learning.calibration(user_id)
+    learning.apply(rows, learned)  # quem entrega o que promete ganha peso; quem não entrega perde
     by_pick = {r["pick"]: r for r in rows}
     pool = [r for r in rows if r["approved"] and r["pick"] not in blocked]
 
@@ -520,7 +569,7 @@ def _execute(cycle_id: int, ai_config: AIConfig | None, client=None) -> None:
         try:
             with session_scope() as db:
                 news = _market_news(db, symbols)
-            context = ai_context(cfg_data, free_slots, mine, pool, news, sorted({f for f in fee_for.values() if f is not None}))
+            context = ai_context(cfg_data, free_slots, mine, pool, news, sorted({f for f in fee_for.values() if f is not None}), learned)
             ai_out, ai_model = structured(ai_config, AI_SYSTEM, context, AI_SCHEMA, "modo_automatico", 4000, client=client)
         except Exception as exc:
             log.warning("IA indisponível no modo automático: %s", exc)
@@ -816,6 +865,8 @@ def overview(db: Session, user_id: int) -> dict:
         "equity_curve": curve,
         "robots": views,
         "cycles": [cycle_view(c, with_pool=i == 0) for i, c in enumerate(cycles)],
+        "manual_running": [{"id": b.id, "name": b.name, "mode": b.mode} for b in manual_running(db, user_id)],
+        "learning": learning.summary(db, user_id),
         "ai_configured": ai is not None,
         "ai_label": ai.label if ai else None,
     }

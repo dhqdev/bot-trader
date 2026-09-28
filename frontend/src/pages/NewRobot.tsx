@@ -7,7 +7,8 @@ import { BacktestEquityChart } from "../components/charts";
 import { Badge, Button, Card, ErrorBox, Field, Input, Loading, Modal, PageHeader, Pnl, Segmented, Switch } from "../components/ui";
 import { api } from "../lib/api";
 import { holdingTime, money, num, pct, price } from "../lib/format";
-import type { Advice, Bot, CoinInfo, CoinTicker, Credentials, Level, LevelInfo, Mode, RankedRobot, Ranking } from "../lib/types";
+import type { AccountSymbols, Advice, Bot, CoinInfo, CoinTicker, Credentials, Level, LevelInfo, Mode, RankedRobot, Ranking } from "../lib/types";
+import { useAuto } from "./Auto";
 
 type Step = "coin" | "amount" | "level" | "result";
 const STEPS: { key: Step; label: string }[] = [
@@ -48,14 +49,11 @@ function Steps({ step, onGo, done }: { step: Step; onGo: (s: Step) => void; done
 
 function CoinStep({ onPick }: { onPick: (symbol: string) => void }) {
   const coins = useQuery({ queryKey: ["robot-coins"], queryFn: () => api.get<CoinTicker[]>("/robots/coins"), staleTime: 60_000 });
-  const symbols = useQuery({
-    queryKey: ["symbols", "USDT"],
-    queryFn: () => api.get<{ symbol: string; base: string }[]>("/market/symbols?quote=USDT"),
-    staleTime: 3_600_000,
-  });
+  // só as moedas que a sua conta da OKX pode negociar (sem chave cadastrada, a lista pública)
+  const symbols = useQuery({ queryKey: ["robot-symbols"], queryFn: () => api.get<AccountSymbols>("/robots/symbols"), staleTime: 3_600_000 });
   const [query, setQuery] = useState("");
   const typed = query.trim().toUpperCase().replace(/[/-]/g, "");
-  const match = symbols.data?.find((s) => s.symbol === typed || s.symbol === `${typed}USDT`);
+  const match = symbols.data?.symbols.find((s) => s.symbol === typed || s.symbol === `${typed}USDT`);
   return (
     <Card title="Qual criptomoeda o robô vai operar?">
       <form
@@ -69,7 +67,7 @@ function CoinStep({ onPick }: { onPick: (symbol: string) => void }) {
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar moeda (ex.: SOL, PEPE, TON)" className="pl-9" list="okx-symbols" aria-label="Buscar moeda" />
           <datalist id="okx-symbols">
-            {symbols.data?.map((s) => <option key={s.symbol} value={s.base} />)}
+            {symbols.data?.symbols.map((s) => <option key={s.symbol} value={s.base} />)}
           </datalist>
         </div>
         <Button type="submit" variant="primary" disabled={!match}>Escolher</Button>
@@ -78,7 +76,9 @@ function CoinStep({ onPick }: { onPick: (symbol: string) => void }) {
       <ErrorBox error={coins.error} />
       {coins.data && (
         <>
-          <p className="mb-2 text-xs text-muted">As mais negociadas na OKX agora:</p>
+          <p className="mb-2 text-xs text-muted">
+            {symbols.data?.from_account ? "As mais negociadas entre as liberadas na sua conta da OKX:" : "As mais negociadas na OKX agora:"}
+          </p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {coins.data.map((c) => (
               <button
@@ -463,18 +463,41 @@ export function NewRobotPage() {
   const [simulated, setSimulated] = useState(true);
   const [level, setLevel] = useState<Level | null>(null);
   const done = useMemo(() => ({ coin: Boolean(symbol), amount: Boolean(symbol) && amount >= 5, level: Boolean(level), result: Boolean(level) }), [symbol, amount, level]);
+  const auto = useAuto();
   const base = symbol.replace(/USDT$/, "");
+  const header = (
+    <PageHeader
+      title="Novo robô"
+      subtitle="Escolha a moeda, o valor e a volatilidade. O sistema testa todos os robôs e mostra do melhor ao pior."
+      actions={
+        <Link to="/bots" className="flex items-center gap-1 text-sm text-ink-2 hover:text-ink">
+          <ArrowLeft className="size-4" /> Robôs
+        </Link>
+      }
+    />
+  );
+  if (auto.data?.config.enabled) {
+    // é um ou outro: com o automático ligado, quem escolhe os robôs é a IA
+    return (
+      <>
+        {header}
+        <Card>
+          <div className="space-y-3 text-sm text-ink-2">
+            <p className="flex items-center gap-2 font-medium text-ink"><Sparkles className="size-4 text-accent" />O modo automático está ligado</p>
+            <p>É um ou outro: com ele ligado, quem escolhe e liga os robôs é a IA. Para escolher você mesmo, desligue o modo automático antes.</p>
+            <Link to="/auto" className="inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink hover:brightness-110">Ir para o Automático</Link>
+          </div>
+        </Card>
+      </>
+    );
+  }
   return (
     <>
-      <PageHeader
-        title="Novo robô"
-        subtitle="Escolha a moeda, o valor e a volatilidade. O sistema testa todos os robôs e mostra do melhor ao pior."
-        actions={
-          <Link to="/bots" className="flex items-center gap-1 text-sm text-ink-2 hover:text-ink">
-            <ArrowLeft className="size-4" /> Robôs
-          </Link>
-        }
-      />
+      {header}
+      <p className="mb-4 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink-2">
+        Aqui é você quem escolhe: o robô segue sempre a estratégia escolhida (a IA dele só ajusta stop e parâmetros). Prefere que a IA escolha tudo? Use o{" "}
+        <Link to="/auto" className="text-accent hover:underline">modo automático</Link>: é um ou outro.
+      </p>
       <Steps step={step} onGo={setStep} done={done} />
       {symbol && step !== "coin" && (
         <p className="-mt-2 mb-4 text-sm text-ink-2">

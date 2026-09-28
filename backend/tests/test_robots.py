@@ -11,7 +11,7 @@ from app.api import robots as robots_api
 from app.core.engine import manager
 from app.core.exchange import SymbolRules
 from app.main import app
-from app.services import backtesting, fees, ranking
+from app.services import backtesting, fees, ranking, tradable
 from app.services.llm import AIConfig
 
 from .conftest import FakeMarket, make_ohlcv
@@ -30,6 +30,9 @@ class CoinMarket(FakeMarket):
             "NOVOUSDUSDT": {"price": 1.0003, "change_pct": 0.01, "quote_volume": 4e9},  # estável fora da lista: também
             "ETHBTC": {"price": 0.03, "change_pct": 0.1, "quote_volume": 1e3},
         }
+
+    def symbols(self, quote=None):
+        return [{"symbol": "BTCUSDT", "base": "BTC", "quote": "USDT"}, {"symbol": "SOLUSDT", "base": "SOL", "quote": "USDT"}]
 
     def inst(self, symbol):
         if symbol not in ("SOLUSDT", "BTCUSDT"):
@@ -178,6 +181,22 @@ def test_rank_advice_and_create_with_one_click(api):
     r = api.post("/api/robots/create", json={**body, "robot_key": ranked["best"], "mode": "live"})
     assert r.status_code == 400 and "OKX" in r.json()["detail"]
     assert api.post("/api/robots/rank", json={**body, "amount": 1}).status_code == 422  # valor mínimo
+
+
+def test_only_coins_released_on_the_account(api, monkeypatch):
+    monkeypatch.setattr(tradable, "account_symbols", lambda user_id: {"SOLUSDT"})  # a conta só pode negociar SOL
+    assert [c["symbol"] for c in api.get("/api/robots/coins").json()] == ["SOLUSDT"]
+    found = api.get("/api/robots/symbols").json()
+    assert found["from_account"] is True and [s["symbol"] for s in found["symbols"]] == ["SOLUSDT"]
+    body = {"symbol": "BTCUSDT", "level": "baixa", "amount": 50}
+    for path in ("/api/robots/rank", "/api/robots/advice"):
+        r = api.post(path, json=body)
+        assert r.status_code == 400 and "liberada na sua conta" in r.json()["detail"]
+    assert api.get("/api/robots/coin/BTCUSDT").status_code == 400
+    assert api.post("/api/robots/create", json={**body, "robot_key": "squeeze:4h"}).status_code == 400
+    monkeypatch.setattr(tradable, "account_symbols", lambda user_id: None)  # sem chave: lista pública
+    found = api.get("/api/robots/symbols").json()
+    assert found["from_account"] is False and len(found["symbols"]) == 2
 
 
 def test_ranking_and_new_robot_use_the_account_fee(api, monkeypatch):

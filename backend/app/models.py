@@ -362,6 +362,27 @@ class AutoRobot(Base):
     retired_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
 
 
+class LearningSample(Base):
+    """Uma previsão guardada para a IA aprender: o que o teste prometia e o que aconteceu depois."""
+
+    __tablename__ = "learning_samples"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    symbol: Mapped[str] = mapped_column(String(32))
+    level: Mapped[str] = mapped_column(String(8))
+    key: Mapped[str] = mapped_column(String(64), index=True)  # estratégia:tempo de candle
+    config: Mapped[dict] = mapped_column(JSON)  # estratégia, parâmetros e risco usados (para medir igual depois)
+    test: Mapped[dict] = mapped_column(JSON)  # o que o teste mostrava na hora
+    snapshot_ms: Mapped[int] = mapped_column(BigInteger)  # abertura do último candle fechado na hora do teste
+    horizon_days: Mapped[int] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(String(12), default="live")  # live (daqui para frente) | history (datas passadas)
+    status: Mapped[str] = mapped_column(String(12), default="pending", index=True)  # pending | done | failed
+    forward: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # o que a estratégia fez no período seguinte
+    created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=utcnow, index=True)
+    evaluated_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+
+
 class AutoCycle(Base):
     """Um ciclo do modo automático: o que foi testado, o que a IA decidiu e o que mudou."""
 

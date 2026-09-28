@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { AlertTriangle, Check, ChevronDown, Loader2, Minus, Play, Plus, Power, ShieldAlert, Sparkles } from "lucide-react";
+import { AlertTriangle, Brain, Check, ChevronDown, Loader2, Minus, Play, Plus, Power, ShieldAlert, Sparkles } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ModeBadge, VolatilityBadge } from "../components/bot";
@@ -8,7 +8,7 @@ import { EquityChart } from "../components/charts";
 import { Badge, Button, Card, Confirm, Empty, ErrorBox, Field, Input, Loading, Modal, PageHeader, Pnl, Stat } from "../components/ui";
 import { api } from "../lib/api";
 import { dateTime, duration, money, pct, timeAgo } from "../lib/format";
-import type { AutoAction, AutoCycle, AutoLimits, AutoOverview, AutoPoolRow, AutoRobot, Credentials, SecurityStatus } from "../lib/types";
+import type { AutoAction, AutoCycle, AutoLimits, AutoOverview, AutoPoolRow, AutoRobot, Credentials, LearningSummary, SecurityStatus } from "../lib/types";
 
 export function useAuto() {
   return useQuery({
@@ -85,6 +85,61 @@ function Protections({ limits: L }: { limits: AutoLimits }) {
         <li>Toda operação tem stop. Robô encerrado com compra aberta não compra de novo: vende pela regra normal e então para.</li>
         <li>Volatilidade alta (candles de minutos) fica de fora: nos testes, as taxas comeram o lucro.</li>
       </ul>
+    </Card>
+  );
+}
+
+function factorText(f: number): string {
+  return `×${f.toFixed(2).replace(".", ",")}`;
+}
+
+/** O que a IA aprendeu comparando o que cada estratégia prometia com o que ela fez depois. */
+function LearningCard({ learning }: { learning: LearningSummary }) {
+  return (
+    <Card title={<span className="flex items-center gap-1.5"><Brain className="size-4 text-accent" />O que a IA aprendeu</span>}>
+      <div className="space-y-3">
+        <p className="text-xs text-ink-2">
+          Toda semana a IA anota o que cada estratégia promete no teste e, 30 a 120 dias depois (conforme o tempo de candle), confere o que ela fez de verdade no mercado. Quem cumpre
+          ganha peso na escolha; quem promete e não entrega perde peso e, com muitas conferências ruins, deixa de ser escolhida. Não usa o GPT: é conta com
+          os dados do mercado.
+        </p>
+        <p className="text-xs text-muted">
+          {learning.checked} previsões conferidas ({learning.from_history} em datas passadas) · {learning.pending} aguardando
+          {learning.next_check_at ? ` · próxima conferência ${dateTime(learning.next_check_at)}` : ""}
+        </p>
+        {learning.table.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs tabular">
+              <thead>
+                <tr className="border-b border-line text-left text-ink-2">
+                  <th className="py-1.5 pr-3 font-medium">Robô</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Conferências</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Prometia / 30 dias</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Entregou / 30 dias</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Acertos</th>
+                  <th className="py-1.5 text-right font-medium">Peso</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {learning.table.map((r) => (
+                  <tr key={r.key}>
+                    <td className="py-1.5 pr-3 text-ink">{r.name}</td>
+                    <td className="py-1.5 pr-3 text-right text-ink-2">{r.samples}</td>
+                    <td className="py-1.5 pr-3 text-right text-ink-2">{pct(r.promised_30d, true, 1)}</td>
+                    <td className="py-1.5 pr-3 text-right"><Pnl value={r.delivered_30d} percent /></td>
+                    <td className="py-1.5 pr-3 text-right text-ink-2">{r.hit_rate}%</td>
+                    <td className="py-1.5 text-right">
+                      {r.blocked ? <Badge tone="bad">fora</Badge> : <span className={r.factor >= 1 ? "text-good-text" : "text-warn-text"}>{factorText(r.factor)}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-muted">Ainda aprendendo: as primeiras conferências aparecem aqui.</p>
+        )}
+      </div>
     </Card>
   );
 }
@@ -193,7 +248,8 @@ function PoolTable({ rows }: { rows: AutoPoolRow[] }) {
                 <th className="py-1.5 pr-3 text-right font-medium">Período todo</th>
                 <th className="py-1.5 pr-3 text-right font-medium">Recente</th>
                 <th className="py-1.5 pr-3 text-right font-medium">Queda máx.</th>
-                <th className="py-1.5 text-right font-medium">Operações</th>
+                <th className="py-1.5 pr-3 text-right font-medium">Operações</th>
+                <th className="py-1.5 text-right font-medium">Peso da IA</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -205,7 +261,8 @@ function PoolTable({ rows }: { rows: AutoPoolRow[] }) {
                   <td className="py-1.5 pr-3 text-right"><Pnl value={r.return_pct} percent /></td>
                   <td className="py-1.5 pr-3 text-right"><Pnl value={r.recent_return_pct} percent /></td>
                   <td className="py-1.5 pr-3 text-right text-ink-2">{pct(r.drawdown_pct, true, 1)}</td>
-                  <td className="py-1.5 text-right text-ink-2">{r.trades}</td>
+                  <td className="py-1.5 pr-3 text-right text-ink-2">{r.trades}</td>
+                  <td className="py-1.5 text-right text-ink-2">{r.learned_factor != null ? factorText(r.learned_factor) : "–"}</td>
                 </tr>
               ))}
             </tbody>
@@ -336,6 +393,7 @@ function OffView({ data }: { data: AutoOverview }) {
   const [budget, setBudget] = useState(String(data.config.mode === "paper" ? data.config.budget : L.default_paper_budget));
   const value = Number(budget.replace(",", "."));
   const valid = Number.isFinite(value) && value >= L.min_per_robot;
+  const manual = data.manual_running;
   return (
     <div className="space-y-4">
       <Card>
@@ -357,15 +415,30 @@ function OffView({ data }: { data: AutoOverview }) {
               </li>
             ))}
           </ol>
+          {manual.length > 0 && (
+            <p className="flex gap-2 rounded-lg border border-warn/40 px-3 py-2 text-sm text-warn-text">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <span>
+                É um ou outro: você tem {manual.length} robô{manual.length > 1 ? "s" : ""} escolhido{manual.length > 1 ? "s" : ""} por você ligado
+                {manual.length > 1 ? "s" : ""} ({manual.map((b) => b.name).join(", ")}). Desligue em{" "}
+                <Link to="/bots" className="underline">Robôs</Link> para ligar o modo automático.
+              </span>
+            </p>
+          )}
           <div className="flex flex-wrap items-end gap-2">
             <Field label="Valor simulado (USDT)" className="w-40">
               <Input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} />
             </Field>
-            <Button variant="primary" onClick={() => act.mutate({ path: "start", body: { mode: "paper", budget: value } })} loading={act.isPending} disabled={!valid}>
+            <Button
+              variant="primary"
+              onClick={() => act.mutate({ path: "start", body: { mode: "paper", budget: value } })}
+              loading={act.isPending}
+              disabled={!valid || manual.length > 0}
+            >
               <Power className="size-4" />
               Ligar no simulado
             </Button>
-            <Button onClick={() => setLive(true)}>Usar dinheiro real</Button>
+            <Button onClick={() => setLive(true)} disabled={manual.length > 0}>Usar dinheiro real</Button>
           </div>
           {!valid && <p className="text-xs text-bad-text">O mínimo é {money(L.min_per_robot)}.</p>}
           <p className="text-xs text-muted">
@@ -382,6 +455,7 @@ function OffView({ data }: { data: AutoOverview }) {
         </div>
       </Card>
       <Protections limits={data.limits} />
+      <LearningCard learning={data.learning} />
       {data.cycles.length > 0 && <History cycles={data.cycles} />}
       <LiveModal open={live} onClose={() => setLive(false)} data={data} />
     </div>
@@ -470,6 +544,7 @@ function OnView({ data }: { data: AutoOverview }) {
       </div>
 
       <RobotsCard robots={data.robots} />
+      <LearningCard learning={data.learning} />
       <History cycles={data.cycles} />
 
       <Confirm

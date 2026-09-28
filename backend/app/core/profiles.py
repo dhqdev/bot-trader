@@ -12,6 +12,16 @@ Filtro de sentimento de cada perfil (o que rendeu mais nos dois grupos de pares)
   (Ignição 1h: +2,7% -> +8,3% na mediana, queda média -19,8% -> -15,9%);
 - HiLo 2h, Squeeze 4h e Confluência 1d: evita comprar com medo extremo
   (Squeeze 4h: +20,9% -> +23,3%; HiLo 2h: +0,7% -> +4,3%; Confluência: igual).
+
+Revisão com a taxa real da OKX (set/2026, 0,4% por ordem a mercado em contas Lv1 do
+Brasil), 14 moedas, escolhendo o robô num período e medindo no seguinte:
+- médio (1h e 2h): só compra se o candle costuma andar 1,5x o custo de ida e volta
+  (min_move_mult). Sem isso, o robô típico perdia 5,5% a 6,6% a cada 4 meses só em
+  taxas; com o filtro, -1,4% e 0% nos dois grupos de moedas.
+- lento (4h e 1d): só compra com o Bitcoin acima da média de 100 dias
+  (btc_trend_days). O resultado do robô escolhido ficou positivo nos dois grupos
+  (+1,6% e +2,4% por período, contra +5,5% e -3,1% sem o filtro).
+Os números de "stats" abaixo são da pesquisa original, com taxa de 0,1%.
 """
 
 from app.core.risk import RiskConfig
@@ -26,14 +36,14 @@ FAST_RISK = {
 MEDIUM_RISK = {
     "stop_loss_mode": "atr", "stop_loss_atr_mult": 2.0, "take_profits": [], "breakeven_at_pct": 0,
     "trailing_enabled": True, "trailing_mode": "atr", "trailing_atr_mult": 3.0, "trailing_activation_pct": 2.0,
-    "cooldown_bars": 2, "sentiment_filter": "avoid_extreme_fear",
+    "cooldown_bars": 2, "sentiment_filter": "avoid_extreme_fear", "min_move_mult": 1.5,
 }  # fmt: skip
 SLOW_RISK = {
     "stop_loss_mode": "atr", "stop_loss_atr_mult": 3.0, "take_profits": [], "breakeven_at_pct": 0,
-    "trailing_enabled": False, "cooldown_bars": 1, "sentiment_filter": "avoid_extreme_fear",
+    "trailing_enabled": False, "cooldown_bars": 1, "sentiment_filter": "avoid_extreme_fear", "btc_trend_days": 100,
 }  # fmt: skip
-# Ignição 1h usa o risco lento, mas com o filtro "sentimento subindo" (o melhor para ela)
-RISING_SLOW_RISK = {**SLOW_RISK, "sentiment_filter": "rising"}
+# 1h (médio): risco lento, com o filtro "sentimento subindo" (o melhor para a Ignição 1h) e o filtro de custo
+RISING_SLOW_RISK = {**SLOW_RISK, "sentiment_filter": "rising", "btc_trend_days": 0, "min_move_mult": 1.5}
 
 TIERS = [
     {

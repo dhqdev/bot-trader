@@ -160,7 +160,8 @@ export function AutopilotCard({ botId, live }: { botId: number; live: boolean })
     <Card title={<span className="flex items-center gap-1.5"><Sparkles className="size-4 text-accent" />IA do robô</span>}>
       <div className="space-y-3 text-sm">
         <p className="text-xs text-ink-2">
-          A IA testa melhorias neste robô no histórico e só troca o que se confirma no período recente.
+          A IA testa melhorias neste robô no histórico e só troca o que se confirma no período recente. Ela ajusta stop, trailing, filtros e
+          parâmetros, mas nunca troca a estratégia escolhida.
           {cfg.next_run_at && cfg.mode !== "off" ? ` Próximo teste: ${dateTime(cfg.next_run_at)}.` : ""}
         </p>
         <Field label="O que a IA pode fazer">

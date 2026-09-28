@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.core import indicators as ta
-from app.core import newsguard
+from app.core import market_trend, newsguard
 from app.core.exchange import PaperTrader, SymbolRules, interval_ms, now_ms
 from app.core.markets import EXCHANGE, EXCHANGE_LABEL, get_market
 from app.core.okx import OkxMarketData, OkxTrader
@@ -218,6 +218,11 @@ class BotService:
             if allowed and not market_ok:
                 allowed, reason = False, market_reason
             if allowed:
+                covers, atr_pct, need = self.risk.move_covers_cost(close, atr_value)
+                if not covers:  # igual ao backtest: movimento típico pequeno demais para pagar a taxa
+                    allowed = False
+                    reason = f"o candle costuma andar {atr_pct:.2f}%, pouco para pagar a taxa de ida e volta (precisa de {need:.2f}%)".replace(".", ",")
+            if allowed:
                 self.buy(atr_value, "signal")
             else:
                 self.event("warn", f"Sinal de compra ignorado: {reason}", snap)
@@ -240,6 +245,10 @@ class BotService:
                 ok, reason = False, why
         except Exception as exc:  # sem o índice, o filtro não bloqueia
             log.warning("Índice de medo e ganância indisponível: %s", exc)
+        if self.risk.btc_trend_days > 0:  # igual ao backtest: último diário fechado do Bitcoin acima da média
+            btc_ok, btc_reason, info["btc_trend"] = market_trend.live_check(self.risk.btc_trend_days)
+            if ok and not btc_ok:
+                ok, reason = False, btc_reason
         item = newsguard.entry_block(self.db, self.bot.base_asset, self.risk.news_guard, self.risk.news_window_hours)
         if item is not None:
             info["news_block"] = {"title": item.title, "source": item.source, "url": item.url, "published_at": item.published_at.isoformat(), "sentiment": item.sentiment}
@@ -260,7 +269,7 @@ class BotService:
 
     def can_enter(self) -> tuple[bool, str]:
         managed = self.db.get(AutoRobot, self.bot.id)
-        if managed is not None and managed.state != "active":
+        if managed is not None and managed.state == "retiring":  # encerrado e religado por você vira robô manual
             return False, "o modo automático está encerrando este robô (só vende a posição aberta, não compra de novo)"
         last = self.db.scalar(
             select(Position)

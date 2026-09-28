@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field, field_validator
 # Distância mínima de stop/trailing (%). Em candles curtos o ATR é minúsculo e o stop
 # ficaria dentro do spread/slippage, saindo logo após a compra.
 MIN_STOP_DISTANCE_PCT = 0.5
+# Slippage estimado por ordem a mercado (%), o mesmo do backtest.
+SLIPPAGE_PCT = 0.05
 
 
 class TakeProfitLevel(BaseModel):
@@ -61,6 +63,22 @@ class RiskConfig(BaseModel):
     # notícias: bloqueia compras (e opcionalmente vende) com notícia muito negativa
     news_guard: Literal["off", "block_entries", "block_and_exit"] = "block_entries"
     news_window_hours: int = Field(12, ge=1, le=72)
+
+    # custo da operação: só compra se o candle costuma andar (ATR %) pelo menos N vezes o custo
+    # de ida e volta, 2 × (taxa + slippage). Com taxa de 0,4%, N = 1 pede ATR de 0,9% do preço.
+    min_move_mult: float = Field(0.0, ge=0, le=5, description="0 desativa")
+
+    # tendência do mercado: só compra com o último diário do Bitcoin acima da média de N dias (core/market_trend.py)
+    btc_trend_days: int = Field(0, ge=0, le=400, description="0 desativa")
+
+    def round_trip_cost_pct(self) -> float:
+        return 2 * (self.fee_pct + SLIPPAGE_PCT)
+
+    def move_covers_cost(self, close: float, atr_value: float | None) -> tuple[bool, float, float]:
+        """(pode comprar?, ATR em % do preço, ATR mínimo exigido em %)."""
+        need = self.min_move_mult * self.round_trip_cost_pct()
+        atr_pct = atr_value / close * 100 if atr_value and close and atr_value == atr_value else 0.0
+        return (self.min_move_mult <= 0 or atr_pct >= need), atr_pct, need
 
     @field_validator("take_profits")
     @classmethod

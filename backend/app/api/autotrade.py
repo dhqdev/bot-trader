@@ -44,6 +44,8 @@ def overview(user: User = Depends(get_current_user), db: Session = Depends(get_d
 def start(body: StartIn, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Liga (ou muda o valor/modo). No simulado não pede nada; com dinheiro real pede a senha e o 2FA."""
     cfg = autotrade.get_config(db, user.id)
+    if not cfg.enabled and (blocked := autotrade.auto_blocked(db, user.id)):
+        raise HTTPException(409, blocked)  # é um ou outro: manual ou automático
     if body.mode == "live":
         if okx_credential(db, user.id) is None:
             raise HTTPException(400, "Cadastre a chave da OKX em Configurações antes de usar dinheiro real.")

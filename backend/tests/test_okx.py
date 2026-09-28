@@ -69,6 +69,11 @@ class FakeOkx:
             return ok([{"acctLv": "1", "perm": "read_only,trade", "ip": "203.0.113.7"}])
         if path == "/api/v5/account/trade-fee":  # conta do Brasil no nível Lv1
             return ok([{"instType": "SPOT", "level": "Lv1", "maker": "-0.001", "taker": "-0.004"}])
+        if path == "/api/v5/account/instruments":  # pares que esta conta pode negociar
+            return ok([
+                {"instId": "SOL-USDT", "baseCcy": "SOL", "quoteCcy": "USDT", "state": "live"},
+                {"instId": "OLD-USDT", "baseCcy": "OLD", "quoteCcy": "USDT", "state": "suspend"},
+            ])  # fmt: skip
         if path == "/api/v5/account/balance":
             if not self.expired_once:
                 self.expired_once = True
@@ -213,6 +218,13 @@ def test_account_permissions_and_balances(fake):
     bal = trader.balances()  # 1ª consulta volta com relógio fora e é repetida
     assert bal["USDT"] == (250.5, 0.0) and bal["SOL"] == (2.0, 0.5)  # sem availBal: saldo - congelado
     assert okx._perm_list("read_only, Trade,WITHDRAW") == ["read_only", "trade", "withdraw"]
+
+
+def test_account_symbols_come_from_the_key(fake):
+    trader = trader_for(fake)
+    assert trader.account_symbols() == {"SOLUSDT"}  # suspenso fica de fora
+    req = fake.requests[-1]
+    assert req.url.path == "/api/v5/account/instruments" and dict(req.url.params) == {"instType": "SPOT"}
 
 
 def test_taker_fee_is_read_from_the_account(fake):

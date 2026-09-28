@@ -1,6 +1,6 @@
 # Bot Trader
 
-Sistema pessoal de trading automatizado na **OKX** (Spot), com painel web de **4 abas** (Painel, Automático, Robôs e Configurações). No **modo automático** você só liga: a IA escolhe as moedas e as estratégias, testa no histórico, liga os robôs, acompanha se está ganhando ou perdendo e troca quem vai mal. Se preferir escolher, para criar um robô você só responde três perguntas: **qual moeda**, **quanto usar** e **qual volatilidade**. O sistema testa todos os robôs no histórico real da moeda, mostra do melhor ao pior, e a IA (**Claude ou GPT**, você escolhe) recomenda o que faz mais sentido. Depois, a IA de cada robô continua testando e aplicando melhorias sozinha, e as notícias e o sentimento do mercado travam compras em momentos ruins. Login com verificação em duas etapas e chaves criptografadas.
+Sistema pessoal de trading automatizado na **OKX** (Spot), com painel web de **4 abas** (Painel, Automático, Robôs e Configurações). No **modo automático** você só liga: a IA escolhe as moedas e as estratégias, testa no histórico, liga os robôs, acompanha se está ganhando ou perdendo e troca quem vai mal. Se preferir escolher, para criar um robô você só responde três perguntas: **qual moeda**, **quanto usar** e **qual volatilidade**. O sistema testa todos os robôs no histórico real da moeda, mostra do melhor ao pior, e a IA (**Claude ou GPT**, você escolhe) recomenda o que faz mais sentido. Automático ou manual: é um ou outro. Depois, a IA de cada robô continua testando e aplicando melhorias sozinha, e a IA **aprende o tempo todo**: anota o que cada estratégia promete e confere depois o que ela entregou no mercado. As notícias, o sentimento do mercado e a tendência do Bitcoin travam compras em momentos ruins. Login com verificação em duas etapas e chaves criptografadas.
 
 > Uso por sua conta e risco. Nenhuma estratégia garante lucro. Comece sempre em modo **simulado**.
 
@@ -26,17 +26,17 @@ Se o PowerShell bloquear: `powershell -ExecutionPolicy Bypass -File .\start.ps1`
 1. **Crie sua conta.** O primeiro cadastro vira o dono do sistema; depois disso o cadastro fecha.
 2. **Configurações:** ative a **verificação em duas etapas** e cadastre a chave de API da **OKX** (veja "Chave da OKX" abaixo) e, se quiser a IA, a chave do Claude/Anthropic ou do GPT/OpenAI. Tudo fica criptografado no banco e nunca volta para a tela; chaves da OKX com permissão de saque são recusadas.
 3. **Automático → escolha o valor simulado → Ligar no simulado.** Pronto: a IA faz o resto (ver "Modo automático" abaixo). Ela opera no mercado real da OKX (preços ao vivo, taxa da sua conta e slippage) com esse valor de mentira, sem gastar dinheiro. Quando estiver confiante, toque em **Usar dinheiro real**.
-4. Ou, se quiser escolher você mesmo: **Robôs → Novo robô**, escolha a moeda, o valor por operação e a volatilidade, e toque em **Usar** no robô do ranking.
+4. Ou, se quiser escolher você mesmo (é um ou outro: com o automático ligado, o Novo robô fica bloqueado; com robôs seus ligados, o automático não liga): **Robôs → Novo robô**, escolha a moeda, o valor por operação e a volatilidade, e toque em **Usar** no robô do ranking.
 5. Acompanhe pelo **Painel**.
 
 O botão **Sistema ligado/desligado**, no topo, para ou retoma todos os robôs de uma vez. Desligar não vende as posições.
 
 ## O que tem em cada tela
 
-- **Automático:** um botão para ligar. Depois mostra o resultado da IA (total, em % do valor, hoje, realizado e em aberto), os robôs que ela opera com o motivo de cada escolha e o que o teste prometia, e o histórico do que ela fez em cada dia.
+- **Automático:** um botão para ligar. Depois mostra o resultado da IA (total, em % do valor, hoje, realizado e em aberto), os robôs que ela opera com o motivo de cada escolha e o que o teste prometia, **o que a IA aprendeu** e o histórico do que ela fez em cada dia.
 - **Painel:** resultado total (realizado + em aberto), hoje, taxa de acerto, curva de resultado acumulado, resultado por dia, robôs, resultado por estratégia, carteira da OKX, humor do mercado com as notícias fortes do momento, últimas operações e atividade. Separa **Real** de **Simulado**.
 - **Robôs:** um cartão por robô com a chave de ligar/desligar, o resultado e o que ele está fazendo agora. **Novo robô** abre o assistente:
-  1. **Moeda:** as mais negociadas na OKX (com preço e variação do dia) ou qualquer outra pela busca.
+  1. **Moeda:** as mais negociadas entre as **liberadas na sua conta da OKX** (a lista vem da própria OKX, pela sua chave), com preço e variação do dia, ou qualquer outra liberada pela busca. Sem chave cadastrada, a lista pública.
   2. **Valor:** quanto cada compra usa, em USDT, com o seu saldo livre na OKX ao lado (se a chave estiver cadastrada) e quanto a moeda costuma oscilar por dia. Com a chave **Valor simulado** ligada (padrão), é dinheiro de mentira: o robô opera no mercado real da OKX, com os preços ao vivo, sem usar o seu saldo.
   3. **Volatilidade:** baixa, média ou alta (ver "Volatilidade e ranking" abaixo).
   4. **Robôs:** todos os robôs daquela volatilidade testados na moeda, do melhor ao pior, com quanto o valor escolhido teria virado, a queda máxima, o resultado recente e a comparação com só segurar a moeda. A recomendação da IA vem no topo; um toque em **Usar** cria o robô (simulado ou real) e já liga.
@@ -47,8 +47,8 @@ O botão **Sistema ligado/desligado**, no topo, para ou retoma todos os robôs d
 
 Você não escolhe nada além do valor: digite o **valor simulado** e toque em **Ligar no simulado** (ou **Usar dinheiro real**, que pede o valor total, sua senha e o código de 2 etapas). Ao ligar, e depois uma vez por dia:
 
-1. **Testa** todas as estratégias, nas volatilidades baixa e média, nas 8 moedas mais negociadas da OKX (moedas estáveis ficam de fora), no histórico real e com taxas. A volatilidade alta não entra: nos testes, as taxas comeram o lucro de todas as estratégias de minutos.
-2. **Aprova** só robôs com lucro no período todo **e** no período recente, com operações suficientes, já descontando a **taxa real da sua conta** (ver "Taxa da OKX" abaixo). Na ordem, robô com poucas operações pesa menos: +300% em 4 operações numa alta forte pode ter sido sorte.
+1. **Testa** todas as estratégias, nas volatilidades baixa e média, nas 8 moedas mais negociadas da OKX **que a sua conta pode negociar** (moedas estáveis ficam de fora), no histórico real e com taxas. A volatilidade alta não entra: nos testes, as taxas comeram o lucro de todas as estratégias de minutos.
+2. **Aprova** só robôs com lucro no período todo **e** no período recente, com operações suficientes, já descontando a **taxa real da sua conta** (ver "Taxa da OKX" abaixo). Na ordem, robô com poucas operações pesa menos (+300% em 4 operações numa alta forte pode ter sido sorte) e vale o peso que a IA aprendeu (ver "A IA que aprende").
 3. **Acompanha** os robôs que ela opera: encerra quem perdeu 10% do valor que recebeu (conferido a cada minuto) ou quem deixou de passar nos testes (só depois de 3 dias, porque cada troca custa taxas). Robô encerrado por ir mal não volta pelos 14 dias seguintes.
 4. **Escolhe**: a IA (Claude ou GPT) escolhe entre os aprovados, no máximo um robô por moeda, e pode deixar o dinheiro parado em USDT se o mercado estiver ruim. Ela nunca escolhe um robô reprovado. Sem chave de IA, vale a ordem do ranking.
 5. **Liga** os robôs, dividindo o valor total em até 3 partes iguais (pelo menos 5 USDT cada: com 9 USDT, por exemplo, vai tudo num robô só). A IA de cada robô continua ajustando stop, trailing e parâmetros.
@@ -59,6 +59,18 @@ Proteções:
 - Se o resultado total desde que foi ligado chegar a **−20%** do valor, todos os robôs são encerrados e nada novo é criado até você tocar em **Retomar**.
 - Desligar funciona do mesmo jeito: os robôs param de comprar e fecham as posições pela regra normal.
 - Com dinheiro real, o valor não pode passar do seu saldo livre de USDT na OKX.
+- **É um ou outro:** com o automático ligado, você não cria nem liga robôs manuais; com robôs escolhidos por você ligados, o automático não liga. Robô manual segue sempre a estratégia que você escolheu.
+
+## A IA que aprende (o tempo todo)
+
+Teste bonito no histórico nem sempre se repete. Por isso a IA confere as próprias previsões:
+
+1. **Anota:** toda semana, nas 8 moedas mais negociadas da sua conta, guarda o que cada robô das volatilidades baixa e média prometia no teste, com o modo automático ligado ou não.
+2. **Confere:** passados 30 dias (candles de 1h e 2h), 60 dias (4h) ou 120 dias (diário, que opera pouco), mede o que o robô fez de verdade nesse período novo, com os candles reais que chegaram depois. É um teste no futuro, que não dá para "decorar".
+3. **Pesa:** para cada estratégia e tempo de candle, compara o prometido com o entregue. Quem cumpre ganha peso na escolha do modo automático; quem promete e não entrega perde peso e, com muitas conferências ruins, deixa de ser escolhida. Com poucas conferências, o peso fica perto de 1: um mês ruim não condena ninguém.
+4. **Começa sabendo:** na primeira vez, faz o mesmo exercício em datas passadas (de 1 a 8 meses atrás), então o aprendizado já nasce com centenas de conferências.
+
+O resultado aparece no cartão **O que a IA aprendeu**, na aba Automático, e vai junto para o Claude/GPT na decisão diária. Não gasta tokens: é conta com os dados do mercado, a cada 6 horas.
 
 ## IA: Claude ou GPT
 
@@ -143,6 +155,18 @@ O que isso significa:
 - A configuração antiga do bot (ChiloRSI + stop 5%, trailing 3%, alvos 5/10/20%) teve mediana entre −14% e −19% nos mesmos tipos de teste.
 - **Nada disso é garantia.** Rode em modo simulado antes do real.
 
+### Revisão com a taxa real (set/2026)
+
+Refeita com a taxa de 0,4% por ordem, 14 moedas (7 de design e 7 de validação) e o mesmo método do sistema: escolhe o robô num período e mede no período seguinte, que ele não viu. Uma mudança só entrou se melhorou **nos dois grupos**.
+
+| Volatilidade | O que mudou | Antes → depois |
+|---|---|---|
+| **Baixa** (4h e diário) | Só compra com o **Bitcoin acima da média de 100 dias** (último diário fechado). Quando o BTC cai, quase todas caem junto. | Robô escolhido, média por período: design +5,5% → +1,6%; validação −3,1% → +1,7%. Passou a ficar positivo nos dois grupos. |
+| **Média** (1h e 2h) | Só compra se o candle costuma andar **1,5× o custo de ida e volta** (2 × (taxa + slippage)). | Robô típico, a cada 4 meses: −5,5% / −6,6% → −1,4% / 0%. As taxas comiam o resultado. |
+| Alta (minutos) | Nada. | |
+
+Também foram testados e **descartados** (não melhoraram nos dois grupos): tendência de fundo de 20 e 60 dias na própria moeda, pausa 3× maior depois de vender, trailing stop nos robôs lentos, stop mais largo e o filtro de custo na volatilidade baixa. Com 0,4% por ordem, a média opera pouco e quase não tem vantagem: o filtro serve para não perder. A baixa segue a melhor opção.
+
 ### Gerenciamento de risco (por bot)
 
 - **Tamanho:** valor fixo por compra, % do saldo, ou % de risco até o stop.
@@ -151,6 +175,8 @@ O que isso significa:
 - **Disciplina:** pausa após saída e perda diária máxima (bloqueia novas compras no dia).
 - **Sentimento do mercado:** filtro de compras pelo Índice de Medo e Ganância (ver abaixo).
 - **Notícias:** trava de compras (e, se quiser, venda da posição) com notícia grave sobre a moeda.
+- **Custo da operação:** só compra se o candle costuma andar N vezes o custo de ida e volta (padrão 1,5× na volatilidade média).
+- **Tendência do Bitcoin:** só compra com o último diário do BTC acima da média de N dias (padrão 100 na volatilidade baixa).
 - Stops e alvos são conferidos a cada ~15 s com o preço atual, não só no fechamento do candle.
 - Cada bot só vende o que ele mesmo comprou; ativos que já estão na sua carteira não são tocados.
 
@@ -194,12 +220,12 @@ Evitar ganância alta e "só entre 25 e 75" foram testados e **descartados** (re
 A cada ciclo (por padrão: todo dia nos robôs de volatilidade alta, a cada 3 dias na média e toda semana na baixa, ou pelo botão **Testar melhorias agora** no robô), para cada robô ligado:
 
 1. **Diagnóstico ("backlog"):** lê as operações, stops, sinais ignorados e erros do bot e aponta os problemas (ex.: muitos stops logo após a compra, resultado real abaixo do backtest, ordens abaixo do mínimo).
-2. **Candidatas:** variações de **uma coisa por vez**: cada parâmetro da estratégia um pouco para cima e para baixo, stop, trailing, alvo, break-even, pausa, filtro de sentimento, outras estratégias, a configuração anterior e as ideias da IA.
+2. **Candidatas:** variações de **uma coisa por vez**: cada parâmetro da estratégia um pouco para cima e para baixo, stop, trailing, alvo, break-even, pausa, filtro de sentimento, filtro de custo, tendência do Bitcoin, a configuração anterior e as ideias da IA. Ela **nunca troca a estratégia**: o robô segue a que você (ou o modo automático) escolheu.
 3. **Validação honesta:** o histórico (2 anos) é dividido em duas partes. A escolha usa só os 2/3 mais antigos; o 1/3 mais recente, que a escolha não viu, serve de confirmação. A candidata também não pode piorar em BTC e ETH.
 4. **Decisão:** só muda se melhorar nas duas partes, sem aumentar a queda máxima, com operações suficientes. No máximo uma mudança a cada 5 dias por bot. Nunca mexe no par, no tempo de candle, no modo (simulado/real) nem no valor das ordens, e nunca tira o stop.
 5. **Aprendizado:** cada ciclo fica registrado, junto com o resultado real depois da mudança. Com uma chave de IA (Claude ou GPT), a IA escreve a análise, guarda lições e propõe ideias novas, que passam pelas mesmas regras. No ciclo seguinte ela recebe esse histórico.
 
-No cartão **IA do robô**, escolha: **Ajustar sozinha** (padrão nos simulados; num robô com dinheiro real pede sua senha e o código de 2 etapas, e troca de estratégia sempre espera sua aprovação), **Só sugerir** (a sugestão aparece com os botões Aplicar e Recusar) ou **Nada**.
+No cartão **IA do robô**, escolha: **Ajustar sozinha** (padrão nos simulados; num robô com dinheiro real pede sua senha e o código de 2 etapas), **Só sugerir** (a sugestão aparece com os botões Aplicar e Recusar) ou **Nada**.
 
 ## App no celular (PWA)
 

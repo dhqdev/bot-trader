@@ -106,6 +106,7 @@ export interface MarketFilters {
   news_guard: NewsGuard;
   sentiment?: FearGreed | null;
   news_block?: { title: string; source: string; url: string; published_at: string; sentiment: number };
+  btc_trend?: { days: number; close: number; ema: number; ok: boolean } | null;
   blocks_entry: boolean;
   reason: string;
 }
@@ -490,6 +491,11 @@ export interface CoinTicker {
   volume_usdt: number;
 }
 
+export interface AccountSymbols {
+  symbols: { symbol: string; base: string; quote: string }[];
+  from_account: boolean;
+}
+
 export interface CoinProfile {
   price?: number;
   daily_volatility_pct?: number;
@@ -596,6 +602,28 @@ export interface AutoPoolRow {
   buy_hold_pct: number;
   days: number;
   yearly_score: number;
+  learned_factor?: number | null;
+}
+
+export interface LearnedRow {
+  key: string;
+  name: string;
+  samples: number;
+  promised_30d: number;
+  delivered_30d: number;
+  hit_rate: number;
+  factor: number;
+  blocked: boolean;
+}
+
+export interface LearningSummary {
+  samples: number;
+  checked: number;
+  pending: number;
+  from_history: number;
+  next_check_at: number | null;
+  table: LearnedRow[];
+  limits: { shrink_samples: number; block_factor: number };
 }
 
 export interface AutoCycle {
@@ -653,6 +681,8 @@ export interface AutoOverview {
   equity_curve: { time: string; pnl: number; live?: boolean }[];
   robots: AutoRobot[];
   cycles: AutoCycle[];
+  manual_running: { id: number; name: string; mode: Mode }[];
+  learning: LearningSummary;
   ai_configured: boolean;
   ai_label: string | null;
 }
