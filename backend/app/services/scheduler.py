@@ -4,6 +4,8 @@
 - notícias (RSS): a cada 15 minutos;
 - classificação das notícias pela IA: a cada 30 minutos (se houver chave da Anthropic);
 - piloto automático: confere a cada minuto se algum bot ligado chegou na hora do ciclo;
+- modo automático: a cada minuto confere os limites de perda, encerra os robôs que
+  terminaram de sair e dispara o ciclo diário (que roda numa thread à parte);
 - limpeza de registros antigos: uma vez por dia.
 
 Uma tarefa que falha (ex.: site de notícias fora do ar) só é tentada de novo
@@ -74,6 +76,12 @@ def autopilot_tick() -> int | None:
     return run_id
 
 
+def _auto() -> None:
+    from app.services import autotrade
+
+    autotrade.tick()
+
+
 _prewarm_thread: threading.Thread | None = None
 
 
@@ -104,17 +112,20 @@ class Scheduler:
             ("fng", 3600, _fng),
             ("news", 900, _news),
             ("news_ai", 1800, _news_ai),
+            ("auto", 60, _auto),
             ("autopilot", 60, autopilot_tick),
             ("prewarm", 6 * 3600, _prewarm),
             ("prune", 86400, _prune),
         ]
 
     def start(self) -> None:
+        from app.services.autotrade import mark_stuck_cycles
         from app.services.optimizer import mark_stuck_runs
 
         if self._thread is not None and self._thread.is_alive():
             return
         mark_stuck_runs()
+        mark_stuck_cycles()
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="scheduler")
         self._thread.start()

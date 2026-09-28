@@ -42,6 +42,7 @@ EVENT_LABELS = {
     "openai_key_removed": "Chave da OpenAI removida",
     "ai_provider_changed": "IA usada pelo sistema alterada",
     "autopilot_live": "Piloto automático autorizado a mexer em bots reais",
+    "auto_live": "Modo automático autorizado a usar dinheiro real",
 }
 
 

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Bot as BotIcon, Newspaper, Plus, ShieldAlert } from "lucide-react";
+import { Bot as BotIcon, Newspaper, Plus, ShieldAlert, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { EventsList, ModeBadge, PositionsTable, StatusBadge, VolatilityBadge } from "../components/bot";
@@ -8,6 +8,7 @@ import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Pnl, Segmented, Sta
 import { api } from "../lib/api";
 import { duration, fearGreedTone, money, num, pct, signedMoney, timeAgo } from "../lib/format";
 import type { BotAlert, Credentials, Dashboard, NewsItem, SentimentResponse, Wallet } from "../lib/types";
+import { AutoBanner } from "./Auto";
 
 const TONE_TEXT = { bad: "text-bad-text", warn: "text-warn-text", neutral: "text-ink", good: "text-good-text" } as const;
 
@@ -149,11 +150,14 @@ export function DashboardPage() {
     return (
       <>
         {header}
+        <AutoBanner />
         <Card>
           <Empty icon={<BotIcon className="size-8" />} title={mode === "live" ? "Nenhum robô com dinheiro real" : "Nenhum robô ainda"}>
-            Escolha a moeda, quanto investir e a volatilidade: o sistema testa todos os robôs e mostra o melhor. Comece no simulado, sem risco.
+            Ligue o modo automático e a IA escolhe e liga os robôs por você. Se preferir escolher, crie um robô: o sistema testa todos e mostra o melhor. Comece no
+            simulado, sem risco.
             <div className="mt-4 flex justify-center gap-2">
-              <Button variant="primary" onClick={() => navigate("/bots/new")}><Plus className="size-4" />Criar robô</Button>
+              <Button variant="primary" onClick={() => navigate("/auto")}><Sparkles className="size-4" />Modo automático</Button>
+              <Button onClick={() => navigate("/bots/new")}><Plus className="size-4" />Criar robô</Button>
             </div>
           </Empty>
         </Card>
@@ -164,6 +168,7 @@ export function DashboardPage() {
   return (
     <>
       {header}
+      <AutoBanner />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
         <div className="rounded-xl border border-line bg-surface px-5 py-4 lg:col-span-2">
           <div className="text-xs text-ink-2">Resultado total {mode === "paper" ? "(simulado)" : mode === "live" ? "(real)" : "(real + simulado)"}</div>

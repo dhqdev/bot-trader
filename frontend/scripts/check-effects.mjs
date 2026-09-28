@@ -7,8 +7,10 @@
 // Regra: efeitos sempre com corpo entre chaves, e nunca `async`.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("../src", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+// fileURLToPath decodifica acentos e espaços ("Área de trabalho") e trata a letra da unidade no Windows
+const ROOT = fileURLToPath(new URL("../src", import.meta.url));
 const BAD = [
   { re: /use(Layout)?Effect\(\s*\(\s*\)\s*=>(?!\s*\{)/g, why: "efeito com retorno implícito: use () => { ... }" },
   { re: /use(Layout)?Effect\(\s*async\b/g, why: "efeito async devolve uma Promise: chame uma função async dentro do efeito" },

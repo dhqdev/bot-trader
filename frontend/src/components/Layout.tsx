@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Bot, Download, LayoutDashboard, LogOut, Moon, Power, RefreshCw, Settings, Sun, WifiOff } from "lucide-react";
+import { Bot, Download, LayoutDashboard, LogOut, Moon, Power, RefreshCw, Settings, Sparkles, Sun, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { api } from "../lib/api";
@@ -12,6 +12,7 @@ import { Confirm } from "./ui";
 
 const NAV = [
   { to: "/", label: "Painel", short: "Painel", icon: LayoutDashboard, end: true },
+  { to: "/auto", label: "Automático", short: "Automático", icon: Sparkles },
   { to: "/bots", label: "Robôs", short: "Robôs", icon: Bot },
   { to: "/settings", label: "Configurações", short: "Ajustes", icon: Settings },
 ];
@@ -197,7 +198,7 @@ export function Layout() {
         className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
         aria-label="Navegação principal"
       >
-        <div className="grid grid-cols-3">
+        <div className="grid grid-cols-4">
           {NAV.map(({ to, short, icon: Icon, end }) => (
             <NavLink
               key={to}
