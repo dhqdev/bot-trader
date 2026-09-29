@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.api import api_router
 from app.config import get_settings
-from app.core.engine import manager, migrate_to_okx
+from app.core.engine import manager, migrate_strategy_defaults, migrate_to_okx
 from app.db import init_db, session_scope
 from app.services.scheduler import scheduler
 
@@ -29,8 +29,11 @@ async def lifespan(_: FastAPI):
     init_db()
     with session_scope() as db:
         moved = migrate_to_okx(db)  # a Binance foi removida: bots antigos passam para a OKX
+        relaxed = migrate_strategy_defaults(db)  # padrões mais soltos: bots que não mudaram o padrão passam para o novo
     if moved:
         log.info("%s bot(s) migrado(s) da Binance para a OKX.", moved)
+    if relaxed:
+        log.info("%s bot(s) passaram para os padrões novos das estratégias.", relaxed)
     if settings.engine_autostart:
         manager.start()
         log.info("Motor iniciado (%s bots ativos).", manager.running_count())

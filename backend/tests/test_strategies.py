@@ -1,6 +1,6 @@
 import pytest
 
-from app.core.strategies import STRATEGIES
+from app.core.strategies import PREVIOUS_DEFAULTS, STRATEGIES
 
 from .conftest import make_ohlcv
 
@@ -89,3 +89,23 @@ def test_htf_filter_only_restricts_entries(ohlcv):
     filtered = STRATEGIES["ignition"].run(ohlcv, {"htf_ema": 300})
     assert not (filtered.entry & ~base.entry).any()  # o filtro só remove entradas
     assert (filtered.exit == base.exit).all()
+
+
+@pytest.mark.parametrize("key", list(PREVIOUS_DEFAULTS))
+def test_looser_defaults_only_add_entries(key):
+    """Os padrões novos compram em tudo que os antigos compravam, e em mais candles."""
+    df = make_ohlcv(3000, seed=11, vol=0.015)
+    old = STRATEGIES[key].run(df, PREVIOUS_DEFAULTS[key]).entry
+    new = STRATEGIES[key].run(df).entry
+    assert not (old & ~new).any()
+    assert new.sum() > old.sum()
+
+
+def test_vol_momentum_without_window_buys_only_on_the_cross(ohlcv):
+    from app.core import indicators as ta
+
+    out = STRATEGIES["vol_momentum"].run(ohlcv, {"fresh_bars": 0, "use_trend_filter": False})
+    z = out.values["Força (z)"]
+    assert (out.entry == ta.crossed_above(z, 1.0)).all()
+    later = STRATEGIES["vol_momentum"].run(ohlcv, {"fresh_bars": 8, "use_trend_filter": False})
+    assert (z[later.entry] >= 1.0).all()  # na janela, só compra se a força continua acima do mínimo

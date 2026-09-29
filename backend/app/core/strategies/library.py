@@ -8,6 +8,14 @@ EMAs, MACD e Reversão Bollinger foram removidas por desempenho fraco.
 Novas (criadas nesta seleção): Squeeze, Candle de ignição e Momentum por
 volatilidade. Mantidas: Confluência, Donchian e HiLo + RSI (evolução da
 ChiloRSI original).
+
+Revisão da frequência (v2.7.0): os robôs passavam semanas sem comprar porque
+várias condições precisavam coincidir no mesmo candle. Com candles reais da OKX
+(10 moedas, 4h em 2 anos, 1h/2h em 1 ano, 15m/5m em 45 dias, taxa de 0,1% e de
+0,4%) ficaram só as mudanças que reduzem a espera sem piorar o resultado no 4h e
+no diário: janelas maiores depois do evento (Squeeze, Momentum, Confluência) e
+filtros de volume/ADX menos exigentes (Ignição, Donchian). Afrouxar o HiLo e o
+Repique RSI piorou em todos os testes, então eles não mudaram.
 """
 
 import numpy as np
@@ -70,10 +78,10 @@ class SqueezeBreakoutStrategy(Strategy):
               help="Quanto maior, mais largas as bandas e mais difícil caracterizar compressão."),
         Param("kc_mult", "Largura do Canal de Keltner (× ATR)", "float", 2.0, 1.0, 3.5, 0.1,
               help="Quanto maior, mais fácil as Bollinger ficarem dentro do canal, ou seja, mais compressões detectadas."),
-        Param("min_squeeze", "Compressão mínima (candles)", "int", 8, 1, 40, 1,
+        Param("min_squeeze", "Compressão mínima (candles)", "int", 5, 1, 40, 1,
               help="Por quantos candles seguidos o mercado precisa ter ficado comprimido. Mais candles = sinais mais raros e mais fortes."),
-        Param("fresh_bars", "Entrar até N candles após o rompimento", "int", 3, 0, 20, 1,
-              help="Evita comprar tarde: depois disso o sinal é ignorado."),
+        Param("fresh_bars", "Entrar até N candles após o rompimento", "int", 10, 0, 20, 1,
+              help="Se no candle do rompimento faltou alguma condição, ainda compra nos N candles seguintes. Depois disso o sinal é ignorado, para não comprar tarde."),
         TREND_PARAM,
         USE_TREND_PARAM,
         HTF_PARAM,
@@ -142,8 +150,8 @@ class IgnitionStrategy(Strategy):
     params = [
         Param("atr_mult", "Tamanho mínimo do candle (× ATR)", "float", 1.5, 0.5, 4.0, 0.1,
               help="Corpo do candle (fechamento − abertura) comparado ao ATR, a variação média de um candle. 1,5 = candle 50% maior que o normal."),
-        Param("vol_mult", "Volume mínimo (× média de 20 candles)", "float", 1.5, 1.0, 5.0, 0.1,
-              help="Confirma que há dinheiro entrando de verdade. 1,5 = volume 50% acima da média."),
+        Param("vol_mult", "Volume mínimo (× média de 20 candles)", "float", 1.2, 1.0, 5.0, 0.1,
+              help="Confirma que há dinheiro entrando de verdade. 1,2 = volume 20% acima da média."),
         Param("close_near_high", "Fechamento no topo do candle (%)", "float", 70, 50, 100, 5,
               help="Onde o candle fechou entre a mínima (0%) e a máxima (100%). 70 = fechou nos 30% de cima, sem devolver a alta."),
         Param("exit_ema", "Média de saída (EMA)", "int", 20, 5, 100, 1,
@@ -195,7 +203,7 @@ class VolMomentumStrategy(Strategy):
     description = (
         "Mede a força da alta recente descontando o 'barulho' normal do ativo: o retorno da janela dividido "
         "pela volatilidade esperada no mesmo período (um z-score). Compra quando essa força passa do mínimo "
-        "e sai quando ela some. Funciona igual em moedas calmas e agitadas. Teve a maior taxa de acerto em "
+        "(ou alguns candles depois, se ela continuar acima) e sai quando ela some. Funciona igual em moedas calmas e agitadas. Teve a maior taxa de acerto em "
         "4h, mas teve o maior drawdown das novas: prefira stop e tamanho de posição conservadores."
     )
     params = [
@@ -205,6 +213,8 @@ class VolMomentumStrategy(Strategy):
               help="1,0 = alta equivalente a 1 desvio padrão acima do normal. Maior = menos sinais e mais fortes."),
         Param("z_exit", "Vende quando a força cai abaixo de (z)", "float", 0.0, -2.0, 2.0, 0.05,
               help="0 = sai quando o retorno da janela deixa de ser positivo."),
+        Param("fresh_bars", "Entrar até N candles após a força passar do mínimo", "int", 8, 0, 30, 1,
+              help="Se no candle em que a força passou do mínimo faltou outra condição, ainda compra nos N candles seguintes, desde que a força continue acima do mínimo. 0 = só no próprio candle."),
         TREND_PARAM,
         USE_TREND_PARAM,
         HTF_PARAM,
@@ -220,7 +230,8 @@ class VolMomentumStrategy(Strategy):
         trend_ok, trend = _trend_ok(df, p)
 
         entry_conditions = {
-            f"Força cruzou acima de {p['z_entry']:g}": ta.crossed_above(z, p["z_entry"]),
+            f"Força acima de {p['z_entry']:g}": z >= p["z_entry"],
+            f"Força passou de {p['z_entry']:g} há ≤ {p['fresh_bars']} candles": _fresh(ta.crossed_above(z, p["z_entry"]), p["fresh_bars"]),
             "Preço acima da EMA de tendência": trend_ok,
         }
         if p["htf_ema"] > 0:
@@ -257,7 +268,7 @@ class ConfluenceStrategy(Strategy):
               help="Média mais longa, de referência. Precisa ser maior que a rápida."),
         TREND_PARAM,
         HTF_PARAM,
-        Param("fresh_bars", "Cruzamento há no máximo (candles)", "int", 10, 1, 60, 1,
+        Param("fresh_bars", "Cruzamento há no máximo (candles)", "int", 15, 1, 60, 1,
               help="Só compra se o cruzamento das médias for recente, para não entrar no fim do movimento."),
         Param("min_score", "Confirmações mínimas (de 5)", "int", 4, 0, 5, 1,
               help="Quantos dos 5 indicadores de apoio precisam concordar. Mais = menos entradas e mais seletivas."),
@@ -336,9 +347,9 @@ class DonchianBreakoutStrategy(Strategy):
               help="Compra quando o fechamento supera a maior máxima deste período (um topo recente)."),
         Param("exit_period", "Vende ao perder a mínima de M candles", "int", 10, 3, 60, 1,
               help="Menor que o de entrada, para proteger o lucro mais rápido."),
-        Param("volume_mult", "Volume mínimo (× média)", "float", 1.2, 0, 5, 0.1,
+        Param("volume_mult", "Volume mínimo (× média)", "float", 1.0, 0, 5, 0.1,
               help="Rompimentos com pouco volume costumam falhar. 0 desliga o filtro."),
-        Param("adx_min", "ADX mínimo", "float", 18, 0, 50, 1,
+        Param("adx_min", "ADX mínimo", "float", 15, 0, 50, 1,
               help="Força mínima da tendência (0 a 100). 0 desliga o filtro."),
         TREND_PARAM,
         USE_TREND_PARAM,

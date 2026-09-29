@@ -90,11 +90,11 @@ Todas são long-only (só compram) e avaliadas **apenas em candles fechados**. O
 
 | Estratégia | Estilo | Como funciona |
 |---|---|---|
-| **Squeeze: compressão e rompimento** (nova, recomendada) | rompimento | Espera o preço ficar comprimido (Bollinger dentro do Keltner) por 8+ candles e compra quando a compressão se desfaz com momentum para cima. Sai quando o preço perde a média do canal. |
-| **Candle de ignição** (nova) | momentum | Compra o candle que "acende" o movimento: alta de 1,5× o ATR, volume 1,5× a média e fechamento perto da máxima. Sai ao perder a EMA 20. |
-| **Momentum ajustado à volatilidade** (nova) | momentum | Compra quando o retorno dos últimos 30 candles, dividido pela volatilidade esperada, passa de 1 desvio (z-score). Sai quando a força some. |
-| Confluência de tendência | tendência | EMA 9 cruzando a 21 há até 10 candles, acima da EMA 200, com 4 de 5 confirmações (Supertrend, MACD, RSI, ADX, volume). |
-| Rompimento Donchian (Tartarugas) | rompimento | Compra na máxima de 20 candles com volume e ADX; vende na mínima de 10. |
+| **Squeeze: compressão e rompimento** (nova, recomendada) | rompimento | Espera o preço ficar comprimido (Bollinger dentro do Keltner) por 5+ candles e compra quando a compressão se desfaz com momentum para cima (até 10 candles depois). Sai quando o preço perde a média do canal. |
+| **Candle de ignição** (nova) | momentum | Compra o candle que "acende" o movimento: alta de 1,5× o ATR, volume 1,2× a média e fechamento perto da máxima. Sai ao perder a EMA 20. |
+| **Momentum ajustado à volatilidade** (nova) | momentum | Compra quando o retorno dos últimos 30 candles, dividido pela volatilidade esperada, passa de 1 desvio (z-score), ou até 8 candles depois se ela continuar acima. Sai quando a força some. |
+| Confluência de tendência | tendência | EMA 9 cruzando a 21 há até 15 candles, acima da EMA 200, com 4 de 5 confirmações (Supertrend, MACD, RSI, ADX, volume). |
+| Rompimento Donchian (Tartarugas) | rompimento | Compra na máxima de 20 candles com volume acima da média e ADX ≥ 15; vende na mínima de 10. |
 | HiLo + RSI (ChiloRSI v2) | tendência | Evolução da estratégia que o bot antigo usava: entra logo após o HiLo (55) virar, com filtros de RSI, tendência e ATR%. |
 
 Cada robô do assistente é uma estratégia com um tempo de candle e regras de risco (stop, trailing, alvos e filtro de sentimento) já validadas para aquele tempo. Há também o **Repique RSI**, que compra quedas exageradas nos candles de minutos.
@@ -166,6 +166,27 @@ Refeita com a taxa de 0,4% por ordem, 14 moedas (7 de design e 7 de validação)
 | Alta (minutos) | Nada. | |
 
 Também foram testados e **descartados** (não melhoraram nos dois grupos): tendência de fundo de 20 e 60 dias na própria moeda, pausa 3× maior depois de vender, trailing stop nos robôs lentos, stop mais largo e o filtro de custo na volatilidade baixa. Com 0,4% por ordem, a média opera pouco e quase não tem vantagem: o filtro serve para não perder. A baixa segue a melhor opção.
+
+### Revisão da frequência (set/2026, v2.7.0)
+
+Os robôs passavam semanas sem comprar: várias condições precisavam coincidir no **mesmo candle** (ex.: o Squeeze só aceitava comprar até 3 candles depois do rompimento; o Momentum, só no candle exato em que a força cruzava o mínimo). Se naquele candle faltava uma condição, o sinal se perdia até o próximo evento raro.
+
+Medido com candles reais da OKX (10 moedas: BTC, ETH, SOL, XRP, DOGE, ADA, LINK, AVAX, LTC, BNB), com os filtros de mercado de cada robô e taxas de 0,1% e 0,4%. "Espera típica" é a mediana do tempo até a primeira compra a partir de um momento qualquer. Só entraram as mudanças que reduzem a espera **sem piorar** o resultado no 4h e no diário:
+
+| Estratégia | O que mudou | 4h: espera típica | 4h: resultado em 2 anos (taxa 0,1% / 0,4%) |
+|---|---|---|---|
+| Squeeze | compressão mínima 8 → 5 candles; compra até 10 candles após o rompimento (era 3) | 30 → 15 dias | +35% → +54% / +18% → +28% |
+| Momentum/volatilidade | compra até 8 candles depois de a força passar do mínimo, se ela continuar acima (antes: só no candle do cruzamento) | 20 → 15 dias | +39% → +60% / +20% → +36% |
+| Confluência | cruzamento das médias há até 15 candles (era 10) | 19 → 15 dias | +28% → +35% / +7% → +10% |
+| Donchian | volume ≥ a média (era 1,2×) e ADX ≥ 15 (era 18) | 17 → 14 dias | +48% → +51% / +25% → +26% |
+| Candle de ignição | volume ≥ 1,2× a média (era 1,5×) | igual | +55% → +59% / +36% → +37% |
+| HiLo + RSI, Repique RSI | nada | | |
+
+- **No último ano (queda de ~39% nas moedas)**, no 4h, Squeeze, Momentum, Confluência e Donchian seguiram melhores (ex.: Squeeze +8,6% → +12,1%, comprando em 41 dias em vez de 67). A Ignição ficou 0,7 ponto pior. Como o robô fica mais tempo comprado, a queda máxima aumentou de 1 a 5 pontos.
+- **Em candles de 2h ou menos, comprar mais vezes custa caro:** as versões novas compram até 2× mais vezes, mas na maioria dos casos perdem um pouco mais (a exceção é o Momentum em 1h, que melhorou). O ranking testa cada robô na moeda antes de recomendar, então esses robôs só aparecem no topo quando funcionam.
+- **Descartados:** afrouxar o HiLo (entrar mais longe da virada, reentrar quando o RSI volta acima da média, volatilidade mínima menor), o nível do Repique RSI, exigir menos confirmações na Confluência e candles de ignição menores. Todos pioraram.
+- **Os filtros de mercado continuam iguais.** Eles também seguram compras: a tendência do Bitcoin sozinha dobra a espera nos robôs lentos. Mas desligá-la baixou o resultado com taxa de 0,4% (Squeeze: +28% → +15%) e aumentou as quedas. Desligar o "sentimento subindo" no 1h levou o resultado de −4,5% para −20%, e dar a ele uma tolerância de 3 a 6 pontos também piorou.
+- **Robôs já criados:** na inicialização, cada parâmetro que ainda estava no padrão antigo passa para o novo, com um aviso na atividade do robô. Valores mudados por você ou pela IA ficam como estão.
 
 ### Gerenciamento de risco (por bot)
 

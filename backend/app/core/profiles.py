@@ -21,7 +21,9 @@ Brasil), 14 moedas, escolhendo o robô num período e medindo no seguinte:
 - lento (4h e 1d): só compra com o Bitcoin acima da média de 100 dias
   (btc_trend_days). O resultado do robô escolhido ficou positivo nos dois grupos
   (+1,6% e +2,4% por período, contra +5,5% e -3,1% sem o filtro).
-Os números de "stats" abaixo são da pesquisa original, com taxa de 0,1%.
+Os números de "stats" abaixo são da pesquisa original, com taxa de 0,1%, e ainda
+não refletem os padrões mais soltos da v2.7.0 (ver strategies/library.py): o
+Squeeze 4h passou a comprar cerca de 2x mais vezes, com resultado igual ou melhor.
 """
 
 from app.core.risk import RiskConfig

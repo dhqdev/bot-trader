@@ -26,8 +26,9 @@ from app.core.markets import EXCHANGE, EXCHANGE_LABEL, get_market
 from app.core.okx import OkxMarketData, OkxTrader
 from app.core.risk import PositionState, RiskConfig, open_position, position_size_quote, update
 from app.core.sentiment import live_check as sentiment_check
-from app.core.strategies import REMOVED, get_strategy
+from app.core.strategies import DEFAULTS_VERSION, PREVIOUS_DEFAULTS, REMOVED, get_strategy
 from app.db import session_scope
+from app.kv import get_kv, set_kv
 from app.models import AutoRobot, Bot, BotEvent, Credential, Order, Position, SystemState, utcnow
 from app.security import decrypt
 
@@ -108,6 +109,40 @@ def migrate_to_okx(db: Session) -> int:
         audit(db, cred.user_id, "binance_keys_removed", None, "Binance removida do sistema")
         db.delete(cred)
     return moved
+
+
+def migrate_strategy_defaults(db: Session) -> int:
+    """Os padrões das estratégias ficaram mais soltos (PREVIOUS_DEFAULTS): cada bot guarda os
+    parâmetros com que foi criado, então quem ainda está no padrão antigo passa para o novo.
+    Valor mudado por você ou pela IA fica como está. Roda uma vez por versão dos padrões.
+    Devolve quantos bots foram atualizados."""
+    if get_kv(db, "strategy_defaults_version", 0) >= DEFAULTS_VERSION:
+        return 0
+    updated = 0
+    for bot in db.scalars(select(Bot)):
+        old = PREVIOUS_DEFAULTS.get(bot.strategy)
+        if not old:
+            continue
+        strategy = get_strategy(bot.strategy)
+        stored = dict(bot.strategy_params or {})
+        new = strategy.resolve_params(None)
+        # parâmetro que não estava guardado é novo: o bot seguia o comportamento antigo
+        changes = {k: new[k] for k, v in old.items() if stored.get(k, v) == v and new[k] != v}
+        if not changes:
+            continue
+        bot.strategy_params = {**stored, **changes}
+        labels = {p.name: p.label for p in strategy.params}
+        text = "; ".join(f"{labels[k]}: {_param(old[k])} → {_param(v)}" for k, v in changes.items())
+        add_event(db, bot.id, "info", f"Estratégia atualizada para comprar com mais frequência (padrões novos): {text}.")
+        updated += 1
+    set_kv(db, "strategy_defaults_version", DEFAULTS_VERSION)
+    return updated
+
+
+def _param(v) -> str:
+    if isinstance(v, bool):
+        return "ligado" if v else "desligado"
+    return f"{v:g}".replace(".", ",") if isinstance(v, float) else str(v)
 
 
 def _fmt(v: float) -> str:

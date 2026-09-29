@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.core import strategies as strategies_mod
 from app.core.engine import BotRunner, BotService, manager
 from app.core.exchange import PaperTrader
+from app.core.strategies import STRATEGIES
 from app.core.strategies.base import Strategy, StrategyOutput, always
 from app.db import session_scope
 from app.models import Bot, BotEvent, Order, Position, User
@@ -222,3 +223,28 @@ def test_bots_with_removed_strategy_are_migrated():
         assert bot.strategy_params["ema_fast"] == 9  # padrões da substituta
         msgs = [e.message for e in db.scalars(select(BotEvent).where(BotEvent.bot_id == bot_id))]
     assert any("removida" in m for m in msgs)
+
+
+def test_bots_on_old_defaults_get_the_looser_ones():
+    from app.core.engine import migrate_strategy_defaults
+    from app.kv import set_kv
+
+    old_squeeze = STRATEGIES["squeeze"].resolve_params({"min_squeeze": 8, "fresh_bars": 3})
+    untouched, tuned, momentum = _make_bot(), _make_bot(), _make_bot()
+    with session_scope() as db:
+        set_kv(db, "strategy_defaults_version", 0)
+        db.get(Bot, untouched).strategy, db.get(Bot, untouched).strategy_params = "squeeze", old_squeeze
+        db.get(Bot, tuned).strategy, db.get(Bot, tuned).strategy_params = "squeeze", {**old_squeeze, "fresh_bars": 2}
+        params = STRATEGIES["vol_momentum"].resolve_params(None)
+        del params["fresh_bars"]  # bot criado antes do parâmetro existir
+        db.get(Bot, momentum).strategy, db.get(Bot, momentum).strategy_params = "vol_momentum", params
+    with session_scope() as db:
+        assert migrate_strategy_defaults(db) >= 3
+    with session_scope() as db:
+        assert migrate_strategy_defaults(db) == 0  # uma vez por versão dos padrões
+        a, b, c = (db.get(Bot, i).strategy_params for i in (untouched, tuned, momentum))
+        msgs = [e.message for e in db.scalars(select(BotEvent).where(BotEvent.bot_id == untouched))]
+    assert (a["min_squeeze"], a["fresh_bars"]) == (5, 10)
+    assert (b["min_squeeze"], b["fresh_bars"]) == (5, 2)  # valor escolhido por você ou pela IA fica
+    assert c["fresh_bars"] == 8
+    assert any("Compressão mínima (candles): 8 → 5" in m for m in msgs)
